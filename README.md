@@ -2,9 +2,45 @@
 
 Hyvä Checkout compatibility layer for the **InnoShip_InnoShip** shipping module.
 
+Developed by **[Liquidlab Agency](https://liquidlab.ro/)** — **Romania’s first full-service Hyvä agency** and the first Hyvä partner in Romania.  
+We've built production-grade shipping, payment, and pickup-point integrations for merchants across Europe, and we hold ourselves to a high bar: the proof is in the pudding — this repo ships with automated end-to-end tests so you know the checkout flow keeps working.
+
+---
+
 The upstream `InnoShip_InnoShip` module ships a working Luma checkout integration: a PUDO (pickup-drop-off) point picker built on Knockout/jQuery components and `window.checkoutConfig`. None of that runs inside Hyvä Checkout, which uses Magewire + Alpine.js and does not expose `checkoutConfig` to the frontend.
 
-This module bridges that gap. It replaces InnoShip's checkout-side UI with a Hyvä-native equivalent while continuing to use InnoShip's database, shipping carrier, AWB generation, and order-management code unchanged.
+This module bridges that gap. It replaces InnoShip's checkout-side UI with a **Hyvä-native equivalent** while continuing to use InnoShip's database, shipping carrier, AWB generation, and order-management code unchanged.
+
+This module is an independent, community-developed integration. It is not affiliated with, endorsed by, or developed in partnership with Innoship.
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="media/checkout_first_step.png" target="_blank"><img src="media/checkout_first_step.png" width="300" alt="Checkout — InnoShip shipping method, no point selected" /></a><br/>
+      <sub>Checkout — locker method (no point selected)</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="media/checkout_second_step.png" target="_blank"><img src="media/checkout_second_step.png" width="300" alt="PUDO picker modal with map, county/city filters and markers" /></a><br/>
+      <sub>Interactive Leaflet map picker</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="media/checkout_third_step.png" target="_blank"><img src="media/checkout_third_step.png" width="300" alt="Selected PUDO point displayed in checkout" /></a><br/>
+      <sub>Selected pickup point with “Clear” button</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3">
+      <a href="media/customer_account.png" target="_blank"><img src="media/customer_account.png" width="800" alt="Order view — PUDO summary with Google Maps / Waze links" /></a><br/>
+      <sub>Customer order view — pickup point summary</sub>
+    </td>
+  </tr>
+</table>
+
+---
 
 ## What it does
 
@@ -96,6 +132,28 @@ The module is also registered with Hyvä's `CompatModuleRegistry` (in `etc/front
 ```bash
 composer require liquidlab-agency/magento2-innoship-hyva-checkout
 ```
+
+---
+
+## About Liquidlab
+
+**[Liquidlab Agency](https://liquidlab.ro/)** is Romania’s first full-service Hyvä agency and the first Hyvä partner in the country.
+
+We specialize in **Magento 2 development** and **performance optimization**, transforming slow stores into blazing-fast, high-converting Hyvä platforms.
+
+Our three pillars — **Security • Stability • Performance** — guide every project we deliver.
+
+Whether it’s custom Hyvä implementations, store migrations, rescue projects for troubled Magento stores, or AI-accelerated development, we deliver scalable, secure, and lightning-fast e-commerce solutions.
+
+- **Website**: [liquidlab.ro](https://liquidlab.ro/)
+- **Services**: Magento 2 • Hyvä Theme • Performance • Migrations • Rescue Projects
+
+---
+
 ## License
 
-Proprietary — Liquidlab Agency.
+**Proprietary** — © Liquidlab Agency. All rights reserved.
+
+---
+
+*Built with ❤️ in Romania for merchants who demand the best checkout experience.*
