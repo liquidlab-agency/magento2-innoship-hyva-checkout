@@ -43,11 +43,26 @@ The session storage key is `innoship_selected_pudo_point` (defined as `INNOSHIP_
 
 This is defensive: Hyvä's checkout flow has multiple steps that may reload or restore the shipping address, and InnoShip's downstream code expects the PUDO fields to be present *before* its own observer runs. Without this, late address restorations can blank out `innoship_pudo_id` and the AWB generation fails.
 
-### 4. Validation gate
+### 4. Disabled upstream controllers
+
+Several `InnoShip_InnoShip` frontend controllers exist only to serve the Luma checkout JS (`view/frontend/web/js/checkout.js`) and have no purpose in a Hyvä-only storefront. Rather than fork or patch `InnoShip_InnoShip`, this module declares DI preferences in `etc/frontend/di.xml` that swap each unused controller class for a shared no-op stub (`Controller/Disabled/NotFound`) which throws `NotFoundException` — every dead URL returns a clean 404.
+
+Disabled endpoints:
+
+- `/innoshipf/pudo/getpudo`
+- `/innoshipf/pudo/getmap`
+- `/innoshipf/pudo/setpudo`
+- `/innoshipf/pudo/getpudofromlocation`
+- `/innoshipf/courier/listcouriers`
+- `/innoshipf/courier/setcourierid`
+
+The stub implements both `HttpGet`/`HttpPostActionInterface` and `CsrfAwareActionInterface` so POSTs reach the 404 instead of being rejected at 405 / CSRF. Admin AWB controllers (`Adminhtml/Awb/*`) are untouched — the preferences are scoped to `etc/frontend/di.xml`.
+
+### 5. Validation gate
 
 `Magewire\PudoPoint` implements Hyvä's `EvaluationInterface`. If the selected shipping method is an InnoShip method, the customer cannot proceed past the shipping step until a pickup point is chosen — Hyvä displays an inline error and emits `shipping:method:error`.
 
-### 5. Order-view PUDO summary
+### 6. Order-view PUDO summary
 
 On the customer's order view page (My Account → Orders), the module overrides InnoShip's `order_info_innoship_front` block with a Hyvä-friendly template (`templates/order/order_shipping_pudo.phtml`). It shows the chosen pickup point's name, address, and "Open in Google Maps" / "Open in Waze" deep links. PUDO lookups go through `ViewModel\PudoInfo`, which reads from the `innoship_pudo` table via this module's repository.
 
@@ -64,6 +79,7 @@ On the customer's order view page (My Account → Orders), the module overrides 
 | Hyvä-compatible PUDO picker UI + modal | This module |
 | Magewire components + Alpine map controller | This module |
 | Pre-submit safety observer | This module |
+| Disabling unused `InnoShip_InnoShip` frontend controllers via DI preferences | This module |
 | Hyvä order-view template override | This module |
 
 The module is also registered with Hyvä's `CompatModuleRegistry` (in `etc/frontend/di.xml`) so Hyvä knows that `Liquidlab_InnoShipHyva` is the compatibility layer for `InnoShip_InnoShip` and will skip InnoShip's Luma-specific frontend assets.
