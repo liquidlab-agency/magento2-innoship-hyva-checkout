@@ -1,0 +1,49 @@
+
+.btn-danger {
+    @apply bg-gradient-to-br from-red-100 to-red-50 text-red-800;
+    @apply border border-red-300/20;
+    @apply hover:from-red-200 hover:to-red-100;
+    @apply focus:ring-red-400/20;
+    @apply hover:text-red-900;
+
+    /* Enhanced hover state for better visual feedback */
+    &:hover {
+        @apply shadow-red-200/50;
+        @apply border-red-400/30;
+    }
+
+    /* Focus state for accessibility */
+    &:focus {
+        @apply ring-red-400/30;
+    }
+
+    /* Active state */
+    &:active {
+        @apply from-red-200 to-red-100;
+    }
+
+    /* Small size variant */
+    &.btn-size-sm {
+        @apply text-sm;
+    }
+
+    /* Large size variant */
+    &.btn-size-lg {
+        @apply text-base;
+    }
+
+    /* Extra large size variant */
+    &.btn-size-xl {
+        @apply text-base;
+    }
+}
+
+/* Icon variant for danger buttons */
+.btn-icon.btn-danger {
+    @apply hover:text-red-600;
+    @apply hover:bg-red-50;
+
+    &:hover {
+        @apply shadow-red-200/30;
+    }
+}

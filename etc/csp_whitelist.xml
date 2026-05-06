@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<csp_whitelist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Csp:etc/csp_whitelist.xml">
+    <policies>
+        <policy id="img-src">
+            <values>
+                <value id="openstreetmap_images" type="host">*.tile.openstreetmap.org</value>
+                <value id="openstreetmap_host_images" type="host">*.openstreetmap.org</value>
+            </values>
+        </policy>
+        <policy id="connect-src">
+            <values>
+                <value id="openstreetmap_api" type="host">*.tile.openstreetmap.org</value>
+                <value id="openstreetmap_host_api" type="host">*.openstreetmap.org</value>
+            </values>
+        </policy>
+    </policies>
+</csp_whitelist>

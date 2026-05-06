@@ -1,0 +1,158 @@
+<?php
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+
+declare(strict_types=1);
+
+use Magento\Framework\Escaper;
+use InnoShip\InnoShip\Block\Frontend\OrderViewAccount;
+use Liquidlab\InnoShipHyva\ViewModel\PudoInfo;
+use Hyva\Theme\Model\ViewModelRegistry;
+use Hyva\Theme\ViewModel\HyvaCsp;
+
+/** @var OrderViewAccount $block */
+/** @var Escaper $escaper */
+/** @var ViewModelRegistry $viewModels */
+
+/** @var PudoInfo $pudoViewModel */
+$pudoViewModel = $block->getPudoInfoViewModel();
+$order = $block->getOrder();
+
+if (!$order || !$pudoViewModel) {
+    return;
+}
+
+$shippingAddress = $order->getShippingAddress();
+if (!$shippingAddress) {
+    return;
+}
+
+$pudoId = (int)$shippingAddress->getInnoshipPudoId();
+if ($pudoId <= 0) {
+    return;
+}
+
+$pudo = $pudoViewModel->getPudoData($pudoId);
+if (!$pudo) {
+    return;
+}
+
+$hyvaCsp = $viewModels->require(HyvaCsp::class);
+$googleUrl = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&layer=traffic&destination=';
+$wazeUrl = 'https://waze.com/ul?ll=';
+?>
+
+<div class="block block-order-details-view bg-white rounded-lg shadow-sm border border-gray-200 mb-6"
+     x-data="pudoInfoComponent">
+     
+    <div class="block-content p-6">
+        <div class="box box-order-shipping-method">
+            <!-- Header -->
+            <div class="flex items-center mb-4">
+                <svg class="w-6 h-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <h3 class="text-lg font-semibold text-gray-900">
+                    <?= $escaper->escapeHtml(__('Shipping Pickup Point')) ?>
+                </h3>
+            </div>
+            
+            <!-- PUDO Information Card -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                <!-- PUDO Name -->
+                <div class="flex items-start mb-3">
+                    <svg class="w-5 h-5 text-gray-500 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                    </svg>
+                    <div>
+                        <h4 class="font-medium text-gray-900">
+                            <?= $escaper->escapeHtml($pudo['name'] ?? '') ?>
+                        </h4>
+                    </div>
+                </div>
+                
+                <!-- Address -->
+                <div class="flex items-start mb-3">
+                    <svg class="w-5 h-5 text-gray-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                    </svg>
+                    <div class="text-sm text-gray-600">
+                        <div>
+                            <?= $escaper->escapeHtml($pudo['addressText'] ?? '') ?>
+                        </div>
+                        <div>
+                            <?= $escaper->escapeHtml($pudo['localityName'] ?? '') ?>
+                            <?= !empty($pudo['postalCode']) ? ' ' . $escaper->escapeHtml($pudo['postalCode']) : '' ?>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Navigation Links -->
+                <?php if (!empty($pudo['latitude']) && !empty($pudo['longitude'])): ?>
+                <div class="flex flex-wrap gap-3 mt-4">
+                    <a href="<?= $escaper->escapeUrl($googleUrl . $pudo['latitude'] . ',' . $pudo['longitude']) ?>" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                       title="<?= $escaper->escapeHtmlAttr(__('Open in Google Maps')) ?>">
+                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                        </svg>
+                        <?= $escaper->escapeHtml(__('Google Maps')) ?>
+                        <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                    </a>
+                    
+                    <a href="<?= $escaper->escapeUrl($wazeUrl . $pudo['latitude'] . ',' . $pudo['longitude']) ?>&navigate=yes" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                       title="<?= $escaper->escapeHtmlAttr(__('Open in Waze')) ?>">
+                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"></path>
+                            <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"></path>
+                        </svg>
+                        <?= $escaper->escapeHtml(__('Waze')) ?>
+                        <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                    </a>
+                </div>
+                <?php endif; ?>
+            </div>
+            
+            <!-- Additional Information -->
+            <div class="text-xs text-gray-500 mt-4 p-3 bg-blue-50 rounded-md">
+                <div class="flex items-center">
+                    <svg class="w-4 h-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="text-blue-700">
+                        <?= $escaper->escapeHtml(__('Click on the navigation links above to get directions to your pickup point.')) ?>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function pudoInfoComponent() {
+    return {
+        // Component initialization
+        init() {
+            console.log('PUDO info component initialized');
+        }
+    };
+}
+
+// Register with Alpine.js
+window.addEventListener('alpine:init', () => {
+    Alpine.data('pudoInfoComponent', pudoInfoComponent);
+}, { once: true });
+</script>
+<?php $hyvaCsp->registerInlineScript() ?>

@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Override the original InnoShip PUDO template with Hyvä-compatible version -->
+        <referenceBlock name="order_info_innoship_front" 
+                        template="Liquidlab_InnoShipHyva::order/order_shipping_pudo.phtml">
+            <arguments>
+                <argument name="pudo_info_view_model" xsi:type="object">Liquidlab\InnoShipHyva\ViewModel\PudoInfo</argument>
+            </arguments>
+        </referenceBlock>
+    </body>
+</page>

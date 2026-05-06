@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
+    <module name="Liquidlab_InnoShipHyva" setup_version="1.0.0">
+        <sequence>
+            <module name="InnoShip_InnoShip"/>
+            <module name="Hyva_Checkout"/>
+        </sequence>
+    </module>
+</config>

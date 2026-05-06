@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+
+    <event name="checkout_submit_before">
+        <observer name="InnoShipHyva_CheckoutSubmitBefore"
+                  instance="Liquidlab\InnoShipHyva\Observer\CheckoutSubmitBefore"/>
+    </event>
+
+    <event name="hyva_config_generate_before">
+        <observer name="liquidlab_innoship_register_module_for_hyva_config"
+                  instance="Liquidlab\InnoShipHyva\Observer\RegisterModuleForHyvaConfig"/>
+    </event>
+</config>

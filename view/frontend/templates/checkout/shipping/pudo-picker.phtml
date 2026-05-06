@@ -1,0 +1,188 @@
+<?php
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+
+declare(strict_types=1);
+
+use Liquidlab\InnoShipHyva\Magewire\PudoPicker;
+use Magento\Framework\Escaper;
+use Hyva\Theme\Model\ViewModelRegistry;
+use Hyva\Theme\ViewModel\HyvaCsp;
+
+/** @var PudoPicker $magewire */
+/** @var \Magento\Framework\View\Element\Template $block */
+/** @var Escaper $escaper */
+/** @var ViewModelRegistry $viewModels */
+$hyvaCsp = $viewModels->require(HyvaCsp::class);
+
+$icons = [
+    0 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-general.png'),
+    1 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-cargus.svg'),
+    2 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-dpd.svg'),
+    3 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-fancourier.png'),
+    6 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-emag.svg'),
+    11 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-postaromana.svg'),
+    12 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-postapanduri.svg'),
+];
+
+$leafletAssets = [
+    'js' => $block->getViewFileUrl('InnoShip_InnoShip::js/leaflet.js'),
+    'css' => $block->getViewFileUrl('InnoShip_InnoShip::css/leaflet.css'),
+];
+
+$translations = [
+    'mon' => __('Mon')->render(),
+    'tue' => __('Tue')->render(),
+    'wed' => __('Wed')->render(),
+    'thu' => __('Thu')->render(),
+    'fri' => __('Fri')->render(),
+    'sat' => __('Sat')->render(),
+    'sun' => __('Sun')->render(),
+    'hours' => __('Hours:')->render(),
+    'phone' => __('Phone:')->render(),
+    'info' => __('Info:')->render(),
+    'cash' => __('Cash')->render(),
+    'card' => __('Card')->render(),
+    'online' => __('Online')->render(),
+    'paymentMethods' => __('Payment methods')->render(),
+    'selectThisPoint' => __('Select This Point')->render(),
+    'failedToLoad' => __('Failed to load map')->render(),
+];
+
+$alpineComponentName = 'innoShipPudoPicker';
+$pudoPickerJs = $block->getViewFileUrl('Liquidlab_InnoShipHyva::js/pudo-picker.js');
+
+$pickerConfig = [
+    'initialShowModal' => $magewire->showModal,
+    'initialSelectedCounty' => (string)$magewire->selectedCounty,
+    'initialSelectedCity' => (string)$magewire->selectedCity,
+    'innoShipData' => $magewire->getInnoShipData(),
+    'iconUrls' => $icons,
+    'leafletAssets' => $leafletAssets,
+    'translations' => $translations,
+];
+?>
+<div id="innoship-pudo-picker-wrapper">
+    <script>
+        window.innoShipPudoPickerConfig = <?= /* @noEscape */ json_encode($pickerConfig) ?>;
+    </script>
+    <?php $hyvaCsp->registerInlineScript() ?>
+    <script src="<?= $escaper->escapeUrl($pudoPickerJs) ?>"></script>
+    <section
+        class="innoship-pudo-picker"
+        x-data="<?= $escaper->escapeHtmlAttr($alpineComponentName) ?>"
+        @innoship-pudo-points-updated.window="onPudoPointsUpdated"
+        @innoship-pudo-data-updated.window="onPudoDataUpdated"
+        @open-innoship-pudo-modal.window="openMapModal"
+    >
+        <!-- Inline Map Modal -->
+        <div x-show="showModal"
+             x-cloak
+             class="fixed inset-0 z-[100] overflow-y-auto"
+             @keydown.escape.window="closeModal"
+             x-transition:enter="ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+
+            <div class="fixed inset-0 bg-black bg-opacity-50" @click="closeModal"></div>
+
+            <div class="flex items-start justify-center min-h-screen p-2 h-full max-h-[80vh]">
+                <div class="relative bg-white rounded-lg shadow-xl w-full max-w-7xl h-full overflow-hidden flex flex-col"
+                     @click.stop
+                     x-transition:enter="ease-out duration-300"
+                     x-transition:enter-start="opacity-0 transform scale-95"
+                     x-transition:enter-end="opacity-100 transform scale-100"
+                     x-transition:leave="ease-in duration-200"
+                     x-transition:leave-start="opacity-100 transform scale-100"
+                     x-transition:leave-end="opacity-0 transform scale-95">
+
+                    <div class="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
+                        <h3 class="text-lg font-medium text-gray-900">
+                            <?= $escaper->escapeHtml(__('Select Pickup Point')) ?>
+                        </h3>
+                        <button @click="closeModal"
+                                class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="p-0 flex-1 overflow-hidden flex flex-col">
+                        <div class="p-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                            <div class="flex-1" wire:key="picker-county-selector">
+                                <label for="picker_county" class="block text-xs font-medium text-gray-700 mb-1"><?= $escaper->escapeHtml(__('County')) ?></label>
+                                <select id="picker_county"
+                                        wire:model.live="selectedCounty"
+                                        :value="selectedCounty"
+                                        @change="updateSelectedCounty"
+                                        class="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                    <option value=""><?= $escaper->escapeHtml(__('Select County')) ?></option>
+                                    <?php foreach ($magewire->getCounties() as $county): ?>
+                                        <option value="<?= $escaper->escapeHtmlAttr($county) ?>" <?= $magewire->selectedCounty === $county ? 'selected' : '' ?>>
+                                            <?= $escaper->escapeHtml($county) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="flex-1" wire:key="picker-city-selector">
+                                <label for="picker_city" class="block text-xs font-medium text-gray-700 mb-1"><?= $escaper->escapeHtml(__('City')) ?></label>
+                                <select id="picker_city"
+                                        wire:model.live="selectedCity"
+                                        :value="selectedCity"
+                                        @change="updateSelectedCity"
+                                        :disabled="isCountyNotSelected"
+                                        class="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100">
+                                    <option value=""><?= $escaper->escapeHtml(__('Select City')) ?></option>
+                                    <?php foreach ($magewire->getCities() as $city): ?>
+                                        <option value="<?= $escaper->escapeHtmlAttr($city) ?>" <?= $magewire->selectedCity === $city ? 'selected' : '' ?>>
+                                            <?= $escaper->escapeHtml($city) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="relative flex-1 w-full">
+                            <div id="innoship-picker-map-container"
+                                 class="h-full w-full"
+                                 x-ref="mapContainer"
+                                 wire:ignore></div>
+
+                            <div x-show="isMapLoading"
+                                 class="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10">
+                                <div class="text-center">
+                                    <svg class="animate-spin h-8 w-8 text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <p class="text-gray-600"><?= $escaper->escapeHtml(__('Loading map...')) ?></p>
+                                </div>
+                            </div>
+
+                            <div x-show="mapError"
+                                 class="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-10">
+                                <div class="text-center">
+                                    <svg class="h-12 w-12 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                    </svg>
+                                    <h3 class="text-lg font-medium text-gray-900 mb-2"><?= $escaper->escapeHtml(__('Error Loading Map')) ?></h3>
+                                    <p class="text-gray-600 mb-4" x-text="mapError"></p>
+                                    <button @click="retryMapLoad"
+                                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                                        <?= $escaper->escapeHtml(__('Retry')) ?>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

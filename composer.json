@@ -1,0 +1,27 @@
+{
+    "name": "liquidlab-agency/magento2-innoship-hyva-checkout",
+    "description": "Hyva Checkout compatibility module for InnoShip (https://innoship.com/)",
+    "type": "magento2-module",
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "Liquidlab Agency",
+            "email": "support@liquidlab.ro",
+            "homepage": "https://liquidlab.ro/"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "magento/framework": ">=103.0",
+        "hyva-themes/magento2-hyva-checkout": "*",
+        "magewirephp/magewire": "*"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Liquidlab\\InnoShipHyva\\": ""
+        }
+    }
+}

@@ -1,0 +1,88 @@
+<?php
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+
+declare(strict_types=1);
+
+use Liquidlab\InnoShipHyva\Magewire\PudoPoint;
+use Magento\Framework\Escaper;
+use Hyva\Theme\Model\ViewModelRegistry;
+
+/** @var \Liquidlab\InnoShipHyva\Magewire\PudoPoint $magewire */
+/** @var \Magento\Framework\View\Element\Template $block */
+/** @var \Magento\Framework\Escaper $escaper */
+/** @var ViewModelRegistry $viewModels */
+
+$icons = [
+    0 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-general.png'),
+    1 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-cargus.svg'),
+    2 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-dpd.svg'),
+    3 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-fancourier.png'),
+    6 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-emag.svg'),
+    11 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-postaromana.svg'),
+    12 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-postapanduri.svg'),
+];
+
+$selectedPudoIcon = null;
+if ($magewire->pudoCourierId !== '') {
+    $selectedPudoIcon = $icons[(int)$magewire->pudoCourierId] ?? $icons[0];
+}
+?>
+<div class="innoship-pudo-point-wrapper">
+    <section class="innoship-pudo-selection" x-data="innoShipPudoLink">
+        <!-- Selected PUDO Display -->
+        <?php if ($magewire->hasSelectedPudo()): ?>
+            <div class="selected-pudo-info mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <?= $escaper->escapeHtml(__('Selected Pickup Point')) ?>
+                </label>
+                <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div class="flex items-start">
+                        <?php if ($selectedPudoIcon): ?>
+                            <img src="<?= $escaper->escapeUrl($selectedPudoIcon) ?>"
+                                 class="w-10 h-10 mr-3 mt-1 object-contain bg-white rounded p-1 border border-green-100"
+                                 alt="<?= $escaper->escapeHtmlAttr(__('Courier Icon')) ?>">
+                        <?php endif; ?>
+                        <div>
+                            <div class="font-medium text-green-800"><?= $escaper->escapeHtml($magewire->pudoName) ?></div>
+                            <div class="text-sm text-green-600"><?= $escaper->escapeHtml($magewire->pudoAddress) ?></div>
+                            <?php if ($magewire->paymentInfo): ?>
+                                <div class="text-xs text-green-600 mt-1"><?= $escaper->escapeHtml($magewire->paymentInfo) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Action Buttons -->
+        <div class="pudo-selection-actions flex flex-wrap gap-2">
+            <button
+                @click="openPicker"
+                class="btn btn-secondary flex items-center"
+                type="button"
+            >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <span><?= $escaper->escapeHtml(__('Choose Pickup Point on Map')) ?></span>
+            </button>
+
+            <?php if ($magewire->hasSelectedPudo()): ?>
+                <button
+                    wire:click="clearPudoPoint"
+                    class="btn btn-danger"
+                    type="button"
+                >
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                    <?= $escaper->escapeHtml(__('Clear PUDO')) ?>
+                </button>
+            <?php endif; ?>
+        </div>
+    </section>
+</div>

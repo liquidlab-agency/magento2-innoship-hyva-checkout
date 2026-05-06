@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="Liquidlab\InnoShipHyva\Api\Data\PudoInterface"
+                type="Liquidlab\InnoShipHyva\Model\Pudo"/>
+    <preference for="Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface"
+                type="Liquidlab\InnoShipHyva\Model\PudoRepository"/>
+</config>

@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!--
+        Disable InnoShip_InnoShip frontend controllers that only exist for
+        the Luma checkout JS (view/frontend/web/js/checkout.js). Hyvä
+        checkout is server-rendered through Magewire and never calls these
+        endpoints, so they are dead URLs and are 404'd by the stub.
+    -->
+    <preference for="InnoShip\InnoShip\Controller\Pudo\Getpudo"
+                type="Liquidlab\InnoShipHyva\Controller\Disabled\NotFound"/>
+    <preference for="InnoShip\InnoShip\Controller\Pudo\Getmap"
+                type="Liquidlab\InnoShipHyva\Controller\Disabled\NotFound"/>
+    <preference for="InnoShip\InnoShip\Controller\Pudo\Setpudo"
+                type="Liquidlab\InnoShipHyva\Controller\Disabled\NotFound"/>
+    <preference for="InnoShip\InnoShip\Controller\Pudo\GetPudoFromLocation"
+                type="Liquidlab\InnoShipHyva\Controller\Disabled\NotFound"/>
+    <preference for="InnoShip\InnoShip\Controller\Courier\Listcouriers"
+                type="Liquidlab\InnoShipHyva\Controller\Disabled\NotFound"/>
+    <preference for="InnoShip\InnoShip\Controller\Courier\Setcourierid"
+                type="Liquidlab\InnoShipHyva\Controller\Disabled\NotFound"/>
+
+    <type name="Hyva\CompatModuleFallback\Model\CompatModuleRegistry">
+        <arguments>
+            <argument name="compatModules" xsi:type="array">
+                <item name="hyva-magento2-innoship" xsi:type="array">
+                    <item name="original_module" xsi:type="string">InnoShip_InnoShip</item>
+                    <item name="compat_module" xsi:type="string">Liquidlab_InnoShipHyva</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+</config>
