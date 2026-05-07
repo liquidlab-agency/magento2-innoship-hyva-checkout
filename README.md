@@ -3,7 +3,6 @@
 Hyvä Checkout compatibility layer for the **InnoShip_InnoShip** shipping module.
 
 Developed by **[Liquidlab Agency](https://liquidlab.ro/)** — **Romania’s first full-service Hyvä agency** and the first Hyvä partner in Romania.  
-We've built production-grade shipping, payment, and pickup-point integrations for merchants across Europe, and we hold ourselves to a high bar: the proof is in the pudding — this repo ships with automated end-to-end tests so you know the checkout flow keeps working.
 
 ---
 
