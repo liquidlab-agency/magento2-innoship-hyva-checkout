@@ -43,9 +43,16 @@ This module is an independent, community-developed integration. It is not affili
 
 ## Video Demo
 
-<video src="media/checkout-process.mp4" width="800" controls>
-  Your browser does not support the video tag.
+
+<video src="https://github.com/user-attachments/assets/5cc18381-2d02-4b6b-a31b-6d93f9651551" width="800" controls>
+Your browser does not support the video tag.
 </video>
+
+The video above demonstrates the checkout flow for a customer without a saved address:
+1. The customer selects a shipping method that delivers to a pickup point (locker).
+2. The interactive map opens, allowing the customer to choose their preferred PUDO point.
+3. **Billing Address Logic:** Since a locker address cannot be used for invoicing, the module automatically unchecks "My billing and shipping address are the same".
+4. If the billing address was previously mirrored from the shipping address, the module clears the location fields (street, city, etc.) while preserving the customer's identity (name, email, phone). This ensures the customer is prompted to provide a valid billing address for their invoice.
 
 ---
 
@@ -110,6 +117,13 @@ The stub implements both `HttpGet`/`HttpPostActionInterface` and `CsrfAwareActio
 On the customer's order view page (My Account → Orders), the module overrides InnoShip's `order_info_innoship_front` block with a Hyvä-friendly template (`templates/order/order_shipping_pudo.phtml`). It shows the chosen pickup point's name, address, and "Open in Google Maps" / "Open in Waze" deep links. PUDO lookups go through `ViewModel\PudoInfo`, which reads from the `innoship_pudo` table via this module's repository.
 
 ![Customer order view — pickup point summary with Google Maps and Waze deep links](media/customer_account.png)
+
+### 7. Automatic billing address management
+
+When a PUDO point is selected, the module ensures that the billing address is not set to the locker address (which is invalid for invoicing).
+- It automatically sets the "Same as shipping" flag to `false`.
+- If the billing address was a mirror of the shipping address, it clears the address fields (company, street, city, postcode, region) to force the customer to enter their real billing information.
+- It preserves the customer's identity fields (First Name, Last Name, Email, Telephone) and country to minimize re-typing.
 
 ## How it integrates with InnoShip_InnoShip
 
