@@ -43,7 +43,7 @@ This module is an independent, community-developed integration. It is not affili
 
 ## Video Demo
 
-<video src="media/checkout-process.mp4" width="800" controls>
+<video src="https://github.com/user-attachments/assets/5cc18381-2d02-4b6b-a31b-6d93f9651551" width="800" controls>
   Your browser does not support the video tag.
 </video>
 
