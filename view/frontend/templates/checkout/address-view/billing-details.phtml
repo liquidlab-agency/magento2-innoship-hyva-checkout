@@ -58,7 +58,7 @@ $pudoLocksBilling = $pudoState->isPudoSelected();
             </label>
 
             <?php if ($pudoLocksBilling): ?>
-                <p class="text-xs text-slate-500 mt-1 ml-7">
+                <p class="text-xs text-slate-500 mt-1">
                     <?= $escaper->escapeHtml(__(
                         'Billing cannot match shipping when the order is delivered to a pickup point. Please enter a billing address.'
                     )) ?>

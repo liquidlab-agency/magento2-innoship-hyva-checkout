@@ -23,7 +23,7 @@
 "Open in Waze","Deschide în Waze",module,Liquidlab_InnoShipHyva
 "Waze","Waze",module,Liquidlab_InnoShipHyva
 "Click on the navigation links above to get directions to your pickup point.","Faceți clic pe linkurile de navigare de mai sus pentru a obține indicații către punctul dvs. de ridicare.",module,Liquidlab_InnoShipHyva
-"PUDO with ID %1 not found","PUDO cu ID-ul %1 nu a fost găsit",module,Liquidlab_InnoShipHyva
+"PUDO with ID %1 not found.","PUDO cu ID-ul %1 nu a fost găsit.",module,Liquidlab_InnoShipHyva
 "Selected Pickup Point","Punct de ridicare selectat",module,Liquidlab_InnoShipHyva
 "Choose Pickup Point on Map","Alege punctul de ridicare pe hartă",module,Liquidlab_InnoShipHyva
 "Clear PUDO","Șterge locație",module,Liquidlab_InnoShipHyva
@@ -42,3 +42,8 @@
 "Sat","Sâm",module,Liquidlab_InnoShipHyva
 "Sun","Dum",module,Liquidlab_InnoShipHyva
 "Courier Icon","Pictogramă curier",module,Liquidlab_InnoShipHyva
+"Invalid PUDO ID.","ID punct de ridicare invalid.",module,Liquidlab_InnoShipHyva
+"Endpoint disabled.","Punct de acces dezactivat.",module,Liquidlab_InnoShipHyva
+"My billing and shipping address are the same","Adresa de facturare este aceeași cu adresa de livrare",module,Liquidlab_InnoShipHyva
+"Billing cannot match shipping when the order is delivered to a pickup point. Please enter a billing address.","Facturarea nu poate coincide cu livrarea atunci când comanda este livrată la un punct de ridicare. Vă rugăm să introduceți o adresă de facturare.",module,Liquidlab_InnoShipHyva
+"PUDO Point","Punct PUDO",module,Liquidlab_InnoShipHyva

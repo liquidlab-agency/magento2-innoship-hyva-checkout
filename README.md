@@ -18,26 +18,34 @@ This module is an independent, community-developed integration. It is not affili
 
 <table>
   <tr>
-    <td align="center" width="33%">
+    <td align="center" width="50%">
       <a href="media/checkout_first_step.png" target="_blank"><img src="media/checkout_first_step.png" width="300" alt="Checkout — InnoShip shipping method, no point selected" /></a><br/>
       <sub>Checkout — locker method (no point selected)</sub>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="50%">
       <a href="media/checkout_second_step.png" target="_blank"><img src="media/checkout_second_step.png" width="300" alt="PUDO picker modal with map, county/city filters and markers" /></a><br/>
       <sub>Interactive Leaflet map picker</sub>
     </td>
-    <td align="center" width="33%">
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <a href="media/customer_account.png" target="_blank"><img src="media/customer_account.png" width="800" alt="Order view — PUDO summary with Google Maps / Waze links" /></a><br/>
+      <sub>Customer order view — pickup point summary</sub>
+    </td>
+    <td align="center" width="50%">
       <a href="media/checkout_third_step.png" target="_blank"><img src="media/checkout_third_step.png" width="300" alt="Selected PUDO point displayed in checkout" /></a><br/>
       <sub>Selected pickup point with “Clear” button</sub>
     </td>
   </tr>
-  <tr>
-    <td align="center" colspan="3">
-      <a href="media/customer_account.png" target="_blank"><img src="media/customer_account.png" width="800" alt="Order view — PUDO summary with Google Maps / Waze links" /></a><br/>
-      <sub>Customer order view — pickup point summary</sub>
-    </td>
-  </tr>
 </table>
+
+---
+
+## Video Demo
+
+<video src="media/checkout-process.mp4" width="800" controls>
+  Your browser does not support the video tag.
+</video>
 
 ---
 

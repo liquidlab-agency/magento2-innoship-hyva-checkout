@@ -419,8 +419,22 @@ class PudoPicker extends Component
                 $shippingAddress->setRegionId($regionInfo['region_id']);
             }
 
-            // Invoices cannot be issued to a locker address. Force
-            // "billing same as shipping" OFF on the canonical quote flag,
+            // Invoices cannot be issued to a locker address.
+            // If the billing address was a mirror of shipping (now a locker),
+            // clear its location fields so the customer is forced to enter
+            // their own billing details, but preserve their identity.
+            if ($shippingAddress->getSameAsBilling()) {
+                if ($billingAddress = $quote->getBillingAddress()) {
+                    $billingAddress->setCompany(null);
+                    $billingAddress->setStreet([]);
+                    $billingAddress->setCity(null);
+                    $billingAddress->setPostcode(null);
+                    $billingAddress->setRegion(null);
+                    $billingAddress->setRegionId(null);
+                }
+            }
+
+            // Force "billing same as shipping" OFF on the canonical quote flag,
             // so BillingDetails::boot() sees the right value on next
             // roundtrip (Plugin\HyvaCheckout\LockBillingAsShippingForPudo
             // is the defensive belt; this is the suspenders).

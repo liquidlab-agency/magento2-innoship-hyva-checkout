@@ -147,7 +147,7 @@ class CheckoutSubmitBefore implements ObserverInterface
         if ($shippingAddress && $shippingAddress->getInnoshipPudoId()) {
             return [
                 'pudo_id' => $shippingAddress->getInnoshipPudoId(),
-                'name' => $shippingAddress->getCompany() ?: 'PUDO Point',
+                'name' => $shippingAddress->getCompany() ?: __('PUDO Point')->render(),
                 'address' => implode(', ', $shippingAddress->getStreet() ?: []),
                 'city' => $shippingAddress->getCity(),
                 'postal_code' => $shippingAddress->getPostcode(),
@@ -174,7 +174,7 @@ class CheckoutSubmitBefore implements ObserverInterface
         $addressParts = $this->parsePudoAddress($pudoData['address'] ?? '');
 
         // Update shipping address with PUDO details
-        $shippingAddress->setCompany($pudoData['name'] ?? 'PUDO Point');
+        $shippingAddress->setCompany($pudoData['name'] ?? __('PUDO Point')->render());
         
         // Set street address
         if (!empty($addressParts['street'])) {
