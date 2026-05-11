@@ -374,7 +374,7 @@
                             <h4 class="font-medium text-gray-900 mb-1">${this.escapeHtml(pin.name)}</h4>
                             <p class="text-sm text-gray-600 mb-1">${this.escapeHtml(pin.address)}</p>
                         </div>
-                        <div class="flex-1 overflow-y-auto p-3 space-y-2 max-h-[200px]">
+                        <div class="flex-1 overflow-y-auto p-1 space-y-2 max-h-[200px]">
                             ${phoneNumber}
                             ${openHours}
                             ${paymentInfo ? `<p class="text-xs text-gray-500">${paymentInfo}</p>` : ''}

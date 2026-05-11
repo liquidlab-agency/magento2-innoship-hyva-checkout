@@ -36,4 +36,40 @@
             </argument>
         </arguments>
     </type>
+
+
+    <!--
+        Per-shipping-carrier payment-method restriction.
+
+        Disable the upstream plugin (`InnoShip\InnoShip\Plugin\Model\PaymentMethodAvailable`).
+        It is brittle (hardcoded `=== "innoshipcargusgo_innoshipcargusgo_1"`)
+        and strips every payment method when its admin field is empty. See
+        docs/UPSTREAM_AUDIT.md item #6 for the full diagnosis.
+
+        Our replacement reads the SAME admin field upstream already exposes
+        (`carriers/innoshipcargusgo/innoship_cargus_go_payment_restriction`),
+        no new admin UI, no merchant reconfiguration, but with robust
+        carrier-code extraction and a real empty-config guard.
+    -->
+    <type name="Magento\Payment\Model\MethodList">
+        <plugin name="restrict_payment_on_shippingmethod" disabled="true"/>
+        <plugin name="liquidlab_innoshiphyva_payment_method_restriction"
+                type="Liquidlab\InnoShipHyva\Plugin\PaymentMethodRestriction"
+                sortOrder="10"/>
+    </type>
+
+    <!--
+        Without this, the payment list does NOT re-render when the customer
+        switches shipping method via Magewire (Hyvä only listens for
+        *_address_saved + coupon events). A full page reload fixes it,
+        which is why the restriction "works after refresh" but not in-flight.
+
+        We append `shipping_method_selected` to the payment-list listener
+        map so refresh fires immediately after every shipping-method change.
+    -->
+    <type name="Hyva\Checkout\Magewire\Checkout\Payment\MethodList">
+        <plugin name="liquidlab_innoshiphyva_refresh_payment_on_shipping_change"
+                type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\RefreshPaymentMethodsOnShippingChange"
+                sortOrder="10"/>
+    </type>
 </config>
