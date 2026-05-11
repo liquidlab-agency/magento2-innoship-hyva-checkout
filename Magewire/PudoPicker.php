@@ -11,6 +11,7 @@ namespace Liquidlab\InnoShipHyva\Magewire;
 use Liquidlab\InnoShipHyva\Api\Data\PudoInterface;
 use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
 use Liquidlab\InnoShipHyva\Model\RegionCoordinatesProvider;
+use Liquidlab\InnoShipHyva\Model\RegionResolver;
 use Magento\Checkout\Model\Session as SessionCheckout;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Quote\Api\CartRepositoryInterface;
@@ -33,6 +34,7 @@ class PudoPicker extends Component
         private readonly LoggerInterface $logger,
         private readonly PudoRepositoryInterface $pudoRepository,
         private readonly RegionCoordinatesProvider $regionCoordinatesProvider,
+        private readonly RegionResolver $regionResolver,
         private readonly AddressExtensionFactory $addressExtensionFactory
     ) {
     }
@@ -75,12 +77,21 @@ class PudoPicker extends Component
                 return;
             }
 
-            $this->updateShippingAddressWithPudo(
-                (string)$pudoData['pudo_id'],
-                (string)($pudoData['courier_id'] ?? ''),
-                (string)($pudoData['name'] ?? ''),
-                (string)($pudoData['address'] ?? '')
-            );
+            // Re-fetch the entity so reconciliation applies the same
+            // structured fields the selection flow uses (street/city/
+            // postcode/country/region) rather than trusting stale session
+            // data that may pre-date a schema change.
+            try {
+                $pudo = $this->pudoRepository->getByPudoId((int)$pudoData['pudo_id']);
+            } catch (NoSuchEntityException $e) {
+                $this->logger->warning(
+                    'InnoShipHyva: session references a PUDO that is no longer in the database: '
+                    . $pudoData['pudo_id']
+                );
+                return;
+            }
+
+            $this->updateShippingAddressWithPudo($pudo);
         } catch (\Exception $e) {
             $this->logger->warning(
                 'InnoShipHyva: reconcileQuoteWithSessionPudo failed: ' . $e->getMessage()
@@ -91,39 +102,17 @@ class PudoPicker extends Component
     public function selectPudoPoint(string $pudoId): void
     {
         try {
-            try {
-                $pudo = $this->pudoRepository->getByPudoId((int)$pudoId);
-            } catch (NoSuchEntityException $e) {
-                throw $e;
-            }
+            $pudo = $this->pudoRepository->getByPudoId((int)$pudoId);
 
-            $pudoData = [
-                'pudo_id' => (string)$pudo->getPudoId(),
-                'courier_id' => (string)$pudo->getCourierId(),
-                'name' => $pudo->getName(),
-                'address' => (string)$pudo->getAddressText(),
-                'city' => $pudo->getLocalityName(),
-                'latitude' => (string)$pudo->getLatitude(),
-                'longitude' => (string)$pudo->getLongitude(),
-                'type' => (string)$pudo->getFixedLocationTypeId(),
-                'payment_info' => $this->formatPaymentInfo(
-                    $this->convertPaymentInfoToJson($pudo->getSupportedPaymentType())
-                ),
-                'selected_county' => $this->selectedCounty,
-                'selected_city' => $this->selectedCity,
-            ];
-
-            $this->sessionCheckout->setData(self::INNOSHIP_PUDO_SESSION_KEY, $pudoData);
-
-            $this->updateShippingAddressWithPudo(
-                $pudoData['pudo_id'],
-                $pudoData['courier_id'],
-                $pudoData['name'],
-                $pudoData['address']
+            $this->sessionCheckout->setData(
+                self::INNOSHIP_PUDO_SESSION_KEY,
+                $this->buildSessionPudoData($pudo)
             );
 
+            $this->updateShippingAddressWithPudo($pudo);
+
             $this->logger->info(
-                'InnoShipHyva: Successfully selected PUDO: ' . $pudoData['name'] . ' (ID: ' . $pudoId . ')'
+                'InnoShipHyva: Successfully selected PUDO: ' . $pudo->getName() . ' (ID: ' . $pudoId . ')'
             );
 
             $this->emit('innoship-pudo-selected');
@@ -131,6 +120,35 @@ class PudoPicker extends Component
             $this->logger->error('InnoShipHyva: Failed to select PUDO: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Serializes the PUDO entity into the array we keep in the checkout
+     * session. Note: the row is already structured — `address` is the
+     * street only, `city` is the locality, etc. — so DOWNSTREAM CODE
+     * MUST NOT try to parse `address` for city/postcode. Use the
+     * dedicated keys instead.
+     */
+    private function buildSessionPudoData(PudoInterface $pudo): array
+    {
+        return [
+            'pudo_id' => (string)$pudo->getPudoId(),
+            'courier_id' => (string)$pudo->getCourierId(),
+            'name' => $pudo->getName(),
+            'address' => (string)$pudo->getAddressText(),
+            'city' => $pudo->getLocalityName(),
+            'postal_code' => (string)$pudo->getPostalCode(),
+            'country_code' => (string)$pudo->getCountryCode(),
+            'county_name' => (string)$pudo->getCountyName(),
+            'latitude' => (string)$pudo->getLatitude(),
+            'longitude' => (string)$pudo->getLongitude(),
+            'type' => (string)$pudo->getFixedLocationTypeId(),
+            'payment_info' => $this->formatPaymentInfo(
+                $this->convertPaymentInfoToJson($pudo->getSupportedPaymentType())
+            ),
+            'selected_county' => $this->selectedCounty,
+            'selected_city' => $this->selectedCity,
+        ];
     }
 
     /**
@@ -362,7 +380,18 @@ class PudoPicker extends Component
         return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
-    private function updateShippingAddressWithPudo(string $pudoId, string $courierId, string $name, string $address): void
+    /**
+     * Overwrite the quote shipping address with the PUDO's structured fields.
+     *
+     * The PUDO record already gives us a clean breakdown — `getAddressText()`
+     * is the street, `getLocalityName()` is the city, etc. — so we map them
+     * 1:1 instead of running any parser over a flat address string.
+     *
+     * We also set `country_id` and `region_id`/`region` (via
+     * {@see RegionResolver}) so the form passes Magento address validation
+     * even when the customer had not entered an address yet.
+     */
+    private function updateShippingAddressWithPudo(PudoInterface $pudo): void
     {
         try {
             $quote = $this->sessionCheckout->getQuote();
@@ -371,23 +400,47 @@ class PudoPicker extends Component
                 return;
             }
 
-            $addressParts = $this->parsePudoAddress($address);
-            $shippingAddress->setCompany($name);
-            $shippingAddress->setStreet([$addressParts['street'] ?? $address]);
-            $shippingAddress->setCity($addressParts['city'] ?? 'Unknown');
-            $shippingAddress->setPostcode($addressParts['postal_code'] ?? '');
-            $shippingAddress->setInnoshipPudoId($pudoId);
-            $shippingAddress->setInnoshipCourierId($courierId);
+            $countryCode = (string)$pudo->getCountryCode() !== ''
+                ? (string)$pudo->getCountryCode()
+                : 'RO';
 
-            $quote->setInnoshipPudoId($pudoId);
-            $quote->setInnoshipCourierId($courierId);
+            $regionInfo = $this->regionResolver->resolveByName(
+                (string)$pudo->getCountyName(),
+                $countryCode
+            );
+
+            $shippingAddress->setCompany($pudo->getName());
+            $shippingAddress->setStreet([(string)$pudo->getAddressText()]);
+            $shippingAddress->setCity($pudo->getLocalityName());
+            $shippingAddress->setPostcode((string)$pudo->getPostalCode());
+            $shippingAddress->setCountryId($countryCode);
+            $shippingAddress->setRegion($regionInfo['region']);
+            if ($regionInfo['region_id'] !== null) {
+                $shippingAddress->setRegionId($regionInfo['region_id']);
+            }
+
+            // Invoices cannot be issued to a locker address. Force
+            // "billing same as shipping" OFF on the canonical quote flag,
+            // so BillingDetails::boot() sees the right value on next
+            // roundtrip (Plugin\HyvaCheckout\LockBillingAsShippingForPudo
+            // is the defensive belt; this is the suspenders).
+            $shippingAddress->setSameAsBilling(false);
+
+            $pudoIdString = (string)$pudo->getPudoId();
+            $courierIdString = (string)$pudo->getCourierId();
+
+            $shippingAddress->setInnoshipPudoId($pudoIdString);
+            $shippingAddress->setInnoshipCourierId($courierIdString);
+
+            $quote->setInnoshipPudoId($pudoIdString);
+            $quote->setInnoshipCourierId($courierIdString);
 
             $extensionAttributes = $shippingAddress->getExtensionAttributes() ?: $this->addressExtensionFactory->create();
             if (method_exists($extensionAttributes, 'setInnoshipPudoId')) {
-                $extensionAttributes->setInnoshipPudoId((int)$pudoId);
+                $extensionAttributes->setInnoshipPudoId($pudo->getPudoId());
             }
             if (method_exists($extensionAttributes, 'setInnoshipCourierId')) {
-                $extensionAttributes->setInnoshipCourierId((int)$courierId);
+                $extensionAttributes->setInnoshipCourierId($pudo->getCourierId());
             }
             $shippingAddress->setExtensionAttributes($extensionAttributes);
 
@@ -395,28 +448,6 @@ class PudoPicker extends Component
         } catch (\Exception $e) {
             $this->logger->error('InnoShipHyva: Failed to update shipping address: ' . $e->getMessage());
         }
-    }
-
-    private function parsePudoAddress(string $address): array
-    {
-        $result = ['city' => '', 'street' => '', 'postal_code' => ''];
-        try {
-            $parts = array_map('trim', explode(',', $address));
-            if (count($parts) >= 1) {
-                $result['city'] = $parts[0];
-            }
-            if (count($parts) >= 2) {
-                $streetParts = array_slice($parts, 1);
-                $lastPart = end($streetParts);
-                if (preg_match('/\b\d{6}\b/', $lastPart)) {
-                    $result['postal_code'] = trim(preg_replace('/.*?(\d{6}).*/', '$1', $lastPart));
-                    array_pop($streetParts);
-                }
-                $result['street'] = implode(', ', $streetParts);
-            }
-        } catch (\Exception $e) {
-        }
-        return $result;
     }
 
     private function formatPaymentInfo(?string $acceptedPaymentType): string

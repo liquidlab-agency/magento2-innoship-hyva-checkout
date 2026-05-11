@@ -13,5 +13,14 @@
                 </arguments>
             </block>
         </referenceBlock>
+
+        <!--
+            Override Hyvä's billing-details template so the
+            "billing same as shipping" checkbox is visibly disabled when a
+            PUDO is selected (server-side enforcement is in
+            Plugin\HyvaCheckout\LockBillingAsShippingForPudo).
+        -->
+        <referenceBlock name="checkout.billing-details"
+                        template="Liquidlab_InnoShipHyva::checkout/address-view/billing-details.phtml"/>
     </body>
 </page>

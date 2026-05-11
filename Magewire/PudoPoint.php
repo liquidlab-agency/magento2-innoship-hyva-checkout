@@ -109,6 +109,12 @@ class PudoPoint extends Component implements EvaluationInterface
 
         $this->sessionCheckout->unsetData(self::INNOSHIP_PUDO_SESSION_KEY);
         $this->restoreOriginalShippingAddress();
+
+        // Notify other Magewire components (e.g. BillingDetails) that the
+        // PUDO selection was cleared, so they can unlock UI elements that
+        // depended on the PUDO being selected (the "billing same as
+        // shipping" checkbox in particular).
+        $this->emit('innoship-pudo-cleared');
     }
 
     public function hasSelectedPudo(): bool

@@ -72,4 +72,37 @@
                 type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\RefreshPaymentMethodsOnShippingChange"
                 sortOrder="10"/>
     </type>
+
+    <!--
+        Pre-populate the visible Hyvä shipping-address form when a PUDO is
+        selected. PudoPicker::selectPudoPoint() already saves the PUDO
+        address onto the quote shipping address and emits
+        `innoship-pudo-selected`. This plugin appends that event to the
+        address form's listener map, pointing at Magewire's built-in
+        `$refresh`, which re-runs boot() and re-imports `$address` from
+        the now-updated quote — so the customer immediately sees the
+        PUDO's company/street/city/postcode in the form inputs.
+    -->
+    <type name="Hyva\Checkout\Magewire\Checkout\AddressView\ShippingDetails\AddressForm">
+        <plugin name="liquidlab_innoshiphyva_refresh_address_form_on_pudo_selected"
+                type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\RefreshAddressFormOnPudoSelected"
+                sortOrder="10"/>
+    </type>
+
+    <!--
+        Lock "billing same as shipping" to OFF while a PUDO is selected.
+        Invoices can't be issued to a locker address. The plugin forces
+        the flag false on every boot/update and subscribes the component
+        to our `innoship-pudo-selected` / `innoship-pudo-cleared` events
+        so it re-renders the moment the customer picks or clears a PUDO.
+
+        The visible `disabled` attribute on the checkbox is applied by the
+        template override at view/frontend/layout/hyva_checkout_components.xml
+        + view/frontend/templates/checkout/address-view/billing-details.phtml.
+    -->
+    <type name="Hyva\Checkout\Magewire\Checkout\AddressView\BillingDetails">
+        <plugin name="liquidlab_innoshiphyva_lock_billing_as_shipping_for_pudo"
+                type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\LockBillingAsShippingForPudo"
+                sortOrder="10"/>
+    </type>
 </config>

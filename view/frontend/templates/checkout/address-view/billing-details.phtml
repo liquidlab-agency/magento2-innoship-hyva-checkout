@@ -1,0 +1,69 @@
+<?php
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ *
+ * Overrides Hyva_Checkout::checkout/address-view/billing-details.phtml to
+ * lock the "billing same as shipping" checkbox to OFF when the customer
+ * has selected a PUDO — invoices can't be issued to a locker address.
+ *
+ * Server-side enforcement lives in
+ * Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\LockBillingAsShippingForPudo.
+ * This template adds the visual `disabled` state and a hint so the
+ * customer understands why the checkbox is greyed out.
+ */
+
+declare(strict_types=1);
+
+use Hyva\Theme\Model\ViewModelRegistry;
+use Magento\Framework\Escaper;
+use Magento\Framework\View\Element\Template;
+use Hyva\Checkout\ViewModel\Checkout\AddressView;
+use Liquidlab\InnoShipHyva\ViewModel\PudoSelectionState;
+
+/** @var Template $block */
+/** @var ViewModelRegistry $viewModels */
+/** @var AddressView $addressView */
+/** @var Escaper $escaper */
+
+$addressView = $viewModels->require(AddressView\AddressViewBilling::class);
+/** @var PudoSelectionState $pudoState */
+$pudoState = $viewModels->require(PudoSelectionState::class);
+$pudoLocksBilling = $pudoState->isPudoSelected();
+?>
+
+<div class="space-y-1">
+    <?= /* @noEscape */ $addressView->renderView() ?>
+
+    <?php if (! $addressView->isVirtual()): ?>
+        <div
+            wire:target="billingAsShipping"
+            wire:loading.class="opacity-25"
+            wire:key="billingAsShippingToggle"
+            <?php if ($pudoLocksBilling): ?>class="opacity-60"<?php endif ?>
+        >
+            <label class="inline-flex items-center gap-x-2.5 mb-0 <?= $pudoLocksBilling ? 'cursor-not-allowed' : '' ?>">
+                <input id="billing-as-shipping"
+                       name="billing-as-shipping"
+                       type="checkbox"
+                       class="form-checkbox"
+                       wire:model="billingAsShipping"
+                       wire:loading.attr="disabled"
+                       <?php if ($pudoLocksBilling): ?>disabled<?php endif ?>
+                />
+
+                <span class="text-slate-700 font-medium <?= $pudoLocksBilling ? '' : 'hover:cursor-pointer' ?>">
+                    <?= $escaper->escapeHtml(__('My billing and shipping address are the same')) ?>
+                </span>
+            </label>
+
+            <?php if ($pudoLocksBilling): ?>
+                <p class="text-xs text-slate-500 mt-1 ml-7">
+                    <?= $escaper->escapeHtml(__(
+                        'Billing cannot match shipping when the order is delivered to a pickup point. Please enter a billing address.'
+                    )) ?>
+                </p>
+            <?php endif ?>
+        </div>
+    <?php endif ?>
+</div>
