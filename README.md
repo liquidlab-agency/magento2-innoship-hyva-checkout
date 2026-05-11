@@ -43,9 +43,8 @@ This module is an independent, community-developed integration. It is not affili
 
 ## Video Demo
 
-
 <video src="https://github.com/user-attachments/assets/5cc18381-2d02-4b6b-a31b-6d93f9651551" width="800" controls>
-Your browser does not support the video tag.
+  Your browser does not support the video tag.
 </video>
 
 The video above demonstrates the checkout flow for a customer without a saved address:
