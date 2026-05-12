@@ -45,7 +45,7 @@ This module is an independent, community-developed integration. It is not affili
 
 ### Checkout Flow and Billing Management
 
-<video src="media/checkout-process.mp4" width="800" controls>
+<video src="https://github.com/user-attachments/assets/5cc18381-2d02-4b6b-a31b-6d93f9651551" width="800" controls>
   Your browser does not support the video tag.
 </video>
 
@@ -57,7 +57,7 @@ The video above demonstrates the checkout flow for a customer without a saved ad
 
 ### Dynamic Payment Method Updates
 
-<video src="media/payment-update.mp4" width="800" controls>
+<video src="https://github.com/user-attachments/assets/0e1aafee-34ba-41ec-9dc5-d7501c697bed" width="800" controls>
   Your browser does not support the video tag.
 </video>
 
