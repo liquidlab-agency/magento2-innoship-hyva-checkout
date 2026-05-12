@@ -43,7 +43,9 @@ This module is an independent, community-developed integration. It is not affili
 
 ## Video Demo
 
-<video src="https://github.com/user-attachments/assets/5cc18381-2d02-4b6b-a31b-6d93f9651551" width="800" controls>
+### Checkout Flow and Billing Management
+
+<video src="media/checkout-process.mp4" width="800" controls>
   Your browser does not support the video tag.
 </video>
 
@@ -52,6 +54,16 @@ The video above demonstrates the checkout flow for a customer without a saved ad
 2. The interactive map opens, allowing the customer to choose their preferred PUDO point.
 3. **Billing Address Logic:** Since a locker address cannot be used for invoicing, the module automatically unchecks "My billing and shipping address are the same".
 4. If the billing address was previously mirrored from the shipping address, the module clears the location fields (street, city, etc.) while preserving the customer's identity (name, email, phone). This ensures the customer is prompted to provide a valid billing address for their invoice.
+
+### Dynamic Payment Method Updates
+
+<video src="media/payment-update.mp4" width="800" controls>
+  Your browser does not support the video tag.
+</video>
+
+This video shows how payment methods are filtered based on the selected shipping method:
+1. Payment methods (such as Cash on Delivery) are restricted according to the carrier's configuration in the admin panel.
+2. The payment methods list in Hyvä Checkout refreshes automatically as soon as a shipping method is selected, ensuring the restrictions take effect without a page reload.
 
 ---
 
@@ -124,16 +136,25 @@ When a PUDO point is selected, the module ensures that the billing address is no
 - If the billing address was a mirror of the shipping address, it clears the address fields (company, street, city, postcode, region) to force the customer to enter their real billing information.
 - It preserves the customer's identity fields (First Name, Last Name, Email, Telephone) and country to minimize re-typing.
 
+### 8. Dynamic payment method restrictions
+
+The module ensures that the available payment methods are always in sync with the selected shipping method:
+- **Per-carrier allowlists:** It respects the payment method restrictions configured in the InnoShip admin panel for each carrier.
+- **Instant Refresh:** In Hyvä Checkout, the payment methods list is automatically refreshed whenever the shipping method changes, ensuring restrictions take effect immediately without a page reload.
+- **Improved logic:** Unlike the upstream implementation, our restriction logic is more robust and handles normalized shipping method codes correctly.
+
 ## How it integrates with InnoShip_InnoShip
 
 | Concern | Owned by |
 |---|---|
 | `innoship_pudo` table + cron sync of pickup points | `InnoShip_InnoShip` (this module reads only) |
 | Shipping carriers (`innoshipcargusgo`, etc.) and AWB generation | `InnoShip_InnoShip` |
+| Payment method restriction configuration | `InnoShip_InnoShip` |
 | `quote_address` / `sales_order_address` columns (`innoship_pudo_id`, `innoship_courier_id`, `innoship_shipping_price`) | `InnoShip_InnoShip` schema |
 | Marker images and bundled Leaflet 1.9.4 assets | `InnoShip_InnoShip::images/...`, `InnoShip_InnoShip::js/leaflet.js` |
 | Hyvä-compatible PUDO picker UI + modal | This module |
 | Magewire components + Alpine map controller | This module |
+| Payment method filtering and refresh logic | This module |
 | Pre-submit safety observer | This module |
 | Disabling unused `InnoShip_InnoShip` frontend controllers via DI preferences | This module |
 | Hyvä order-view template override | This module |
