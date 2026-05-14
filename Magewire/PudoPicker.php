@@ -277,6 +277,7 @@ class PudoPicker extends Component
             'name' => $pudo->getName(),
             'address' => $pudo->getAddressText(),
             'city' => $pudo->getLocalityName(),
+            'postal_code' => (string)$pudo->getPostalCode(),
             'latitude' => $pudo->getLatitude(),
             'longitude' => $pudo->getLongitude(),
             'type' => $pudo->getFixedLocationTypeId(),

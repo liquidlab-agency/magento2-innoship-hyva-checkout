@@ -33,11 +33,31 @@
             translations: cfg.translations || {},
             leafletIcons: {},
 
+            // Search state — all client-side, no Magewire roundtrips
+            searchQuery: '',
+            searchResults: [],   // filtered pins visible in the dropdown, capped at 20
+            markers: {},         // pudo_id (string) → Leaflet Marker, for pan + openPopup
+            showSearchResults: false,
+            showNoResultsRow: false,
+            searchPlaceholderText: '',
+            noResultsText: '',
+
             init() {
                 this.initLeafletIcons();
 
+                // Hydrate translation strings used by the search dropdown.
+                // These are plain string properties so Alpine's CSP build can bind
+                // them as bare paths (:placeholder="searchPlaceholderText" etc.)
+                const t = this.translations;
+                this.searchPlaceholderText = t.searchPlaceholder || '';
+                this.noResultsText         = t.searchNoResults   || '';
+
                 this.$nextTick(() => {
                     this.syncStateWithMagewire();
+
+                    // Reactive search: re-filter the loaded pin list on every keystroke.
+                    // Client-side only — no Magewire roundtrip per character.
+                    this.$watch('searchQuery', () => this.recomputeSearchResults());
 
                     this.$watch('showModal', (value) => {
                         if (this.$wire) {
@@ -103,6 +123,9 @@
                     this.innoShipData = event.detail.data;
                     this.selectedCounty = event.detail.data.selectedCounty || '';
                     this.selectedCity = event.detail.data.selectedCity || '';
+                    // New pin set from county/city change — stale search results no longer
+                    // correspond to the visible markers, so clear them.
+                    this.resetSearchState();
                 }
             },
 
@@ -122,12 +145,22 @@
                 return !this.selectedCounty;
             },
 
+            /**
+             * Returns true when a city has been selected.
+             * Used by `x-show="isCitySelected"` on the search wrapper in the template.
+             * Alpine CSP calls function-valued properties automatically — no arguments needed.
+             */
+            isCitySelected() {
+                return !!this.selectedCity;
+            },
+
             hasNoCustomerLocation() {
                 return !this.innoShipData.customerLocation;
             },
 
             updateMarkers(pins) {
                 this.innoShipData.pins = pins;
+                this.resetSearchState();   // markers map rebuilt by addMapMarkers() below
                 if (!this.mapInstance) return;
 
                 this.mapInstance.eachLayer((layer) => {
@@ -182,6 +215,7 @@
                     this.mapInstance = null;
                     this.mapInitialized = false;
                 }
+                this.resetSearchState();
             },
 
             async loadMapResources() {
@@ -316,6 +350,10 @@
                     this.initLeafletIcons();
                 }
 
+                // Reset the marker index before rebuilding so focusResult() always
+                // has a fresh reference to the current set of Leaflet Marker objects.
+                this.markers = {};
+
                 const markers = [];
                 this.innoShipData.pins.forEach((pin) => {
                     const courierId = pin.courier_id || 0;
@@ -325,6 +363,10 @@
                         .addTo(this.mapInstance);
 
                     marker.bindPopup(this.createPopupContent(pin));
+
+                    // Index by pudo_id (cast to string for consistent key lookup).
+                    this.markers[String(pin.pudo_id)] = marker;
+
                     markers.push(marker);
                 });
 
@@ -446,6 +488,88 @@
                 } catch (e) {
                     return '';
                 }
+            },
+
+            /**
+             * CSP-safe replacement for x-model on the search input.
+             * `x-model` generates an assignment expression that Alpine CSP cannot evaluate;
+             * the pattern `:value="searchQuery" @input="setSearchQuery"` is required instead.
+             * The $watch('searchQuery', ...) in init() fires automatically after the assignment,
+             * triggering recomputeSearchResults() with no extra wiring needed.
+             */
+            setSearchQuery() {
+                this.searchQuery = this.$event.target.value;
+            },
+
+            /**
+             * Filter the currently-loaded pins against the search query.
+             * Matched against: name, street address, city, postal_code.
+             * Substring match, case-insensitive. Results capped at 20 to keep the DOM light.
+             * Called on every `searchQuery` change via the $watch in init().
+             */
+            recomputeSearchResults() {
+                const q = (this.searchQuery || '').trim().toLowerCase();
+                if (q.length < 1) {
+                    this.searchResults    = [];
+                    this.showSearchResults = false;
+                    this.showNoResultsRow = false;
+                    return;
+                }
+
+                const matches = (this.innoShipData.pins || []).filter((p) =>
+                    (p.name        || '').toLowerCase().includes(q) ||
+                    (p.address     || '').toLowerCase().includes(q) ||
+                    (p.city        || '').toLowerCase().includes(q) ||
+                    (p.postal_code || '').toLowerCase().includes(q)
+                ).slice(0, 20);
+
+                // Build a `subline` for each result so the template can bind
+                // it as a bare path (`result.subline`) without inline expressions.
+                this.searchResults = matches.map((p) => {
+                    const cityPostcode = [p.city, p.postal_code].filter(Boolean).join(' ');
+                    const subline      = [p.address, cityPostcode].filter(Boolean).join(', ');
+                    return Object.assign({}, p, { subline: subline });
+                });
+
+                this.showSearchResults = true;
+                this.showNoResultsRow  = (matches.length === 0);
+            },
+
+            /**
+             * Pans the Leaflet map to the pin selected from the search dropdown,
+             * zooms to 17 (mirrors legacy Luma), and opens its existing popup so
+             * the customer can hit "Select This Point" through the normal flow.
+             *
+             * The pudo_id is read from `data-pudo-id` on the clicked <li>
+             * because Hyvä's CSP-friendly Alpine build cannot pass arguments
+             * in directive expressions (`x-on:click="focusResult"` is bare).
+             */
+            focusResult(event) {
+                const el = event && (event.currentTarget || event.target);
+                const id = el ? String(el.dataset.pudoId || '') : '';
+                const marker = id ? this.markers[id] : null;
+
+                if (!marker || !this.mapInstance) return;
+
+                this.mapInstance.setView(marker.getLatLng(), 17);
+                marker.openPopup();
+
+                // Clear the dropdown — customer now sees the pin on the map.
+                this.searchQuery       = '';
+                this.searchResults     = [];
+                this.showSearchResults = false;
+            },
+
+            /**
+             * Shared helper: clear all search state + the marker index.
+             * Called on county/city change, modal close, and pin-set updates.
+             */
+            resetSearchState() {
+                this.markers           = {};
+                this.searchQuery       = '';
+                this.searchResults     = [];
+                this.showSearchResults = false;
+                this.showNoResultsRow  = false;
             },
 
             escapeHtml(text) {

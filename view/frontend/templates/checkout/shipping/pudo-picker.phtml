@@ -49,6 +49,8 @@ $translations = [
     'paymentMethods' => __('Payment methods')->render(),
     'selectThisPoint' => __('Select This Point')->render(),
     'failedToLoad' => __('Failed to load map')->render(),
+    'searchPlaceholder' => __('Search by name, street, city or postcode')->render(),
+    'searchNoResults' => __('No matching pickup points')->render(),
 ];
 
 $alpineComponentName = 'innoShipPudoPicker';
@@ -113,9 +115,13 @@ $pickerConfig = [
                         </button>
                     </div>
 
-                    <div class="p-0 flex-1 overflow-hidden flex flex-col">
-                        <div class="p-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-                            <div class="flex-1" wire:key="picker-county-selector">
+                    <!-- Two-column body: left sidebar (filters) + right map panel -->
+                    <div class="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0">
+
+                        <!-- LEFT SIDEBAR: county, city, search -->
+                        <div class="flex-shrink-0 w-full md:w-80 bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200 p-4 flex flex-col gap-4 overflow-y-auto">
+
+                            <div wire:key="picker-county-selector">
                                 <label for="picker_county" class="block text-xs font-medium text-gray-700 mb-1"><?= $escaper->escapeHtml(__('County')) ?></label>
                                 <select id="picker_county"
                                         wire:model.live="selectedCounty"
@@ -130,7 +136,8 @@ $pickerConfig = [
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="flex-1" wire:key="picker-city-selector">
+
+                            <div wire:key="picker-city-selector">
                                 <label for="picker_city" class="block text-xs font-medium text-gray-700 mb-1"><?= $escaper->escapeHtml(__('City')) ?></label>
                                 <select id="picker_city"
                                         wire:model.live="selectedCity"
@@ -146,9 +153,39 @@ $pickerConfig = [
                                     <?php endforeach; ?>
                                 </select>
                             </div>
+
+                            <!-- Search: shown only after a city has been selected.
+                                 wire:ignore prevents Magewire DOM-diffs from clearing the
+                                 typed value on county/city roundtrips.
+                                 isCitySelected() is a CSP-safe method that returns !!selectedCity.
+                                 x-cloak hides it until Alpine initialises and evaluates x-show. -->
+                            <div class="relative" wire:ignore x-show="isCitySelected" x-cloak>
+                                <label class="block text-xs font-medium text-gray-700 mb-1"><?= $escaper->escapeHtml(__('Search')) ?></label>
+                                <input type="search"
+                                       :value="searchQuery"
+                                       @input="setSearchQuery"
+                                       :placeholder="searchPlaceholderText"
+                                       class="block w-full text-sm rounded-md border-gray-300 focus:ring-blue-500 focus:border-blue-500 py-2 px-3">
+                                <ul x-show="showSearchResults"
+                                    class="absolute left-0 right-0 z-20 max-h-64 overflow-y-auto bg-white shadow-lg rounded-md mt-1 ring-1 ring-black ring-opacity-5">
+                                    <template x-for="result in searchResults" :key="result.pudo_id">
+                                        <li :data-pudo-id="result.pudo_id"
+                                            x-on:click="focusResult"
+                                            class="px-3 py-2 hover:bg-gray-100 cursor-pointer">
+                                            <div class="text-sm font-medium text-gray-900" x-text="result.name"></div>
+                                            <div class="text-xs text-gray-500" x-text="result.subline"></div>
+                                        </li>
+                                    </template>
+                                    <li x-show="showNoResultsRow"
+                                        class="px-3 py-2 text-sm text-gray-500"
+                                        x-text="noResultsText"></li>
+                                </ul>
+                            </div>
+
                         </div>
 
-                        <div class="relative flex-1 w-full">
+                        <!-- RIGHT PANEL: Leaflet map + overlays -->
+                        <div class="relative flex-1 min-h-[300px] md:min-h-0">
                             <div id="innoship-picker-map-container"
                                  class="h-full w-full"
                                  x-ref="mapContainer"
@@ -180,6 +217,7 @@ $pickerConfig = [
                                 </div>
                             </div>
                         </div>
+
                     </div>
                 </div>
             </div>

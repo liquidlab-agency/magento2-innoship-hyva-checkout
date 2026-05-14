@@ -76,14 +76,17 @@ When the customer chooses an InnoShip shipping method (e.g. `innoshipcargusgo_*`
 ![Checkout — locker shipping method, no point selected yet](media/checkout_first_step.png)
 
 - Clicking it opens a modal with an interactive Leaflet map of available pickup points.
+- The modal uses a **two-column layout**: a left sidebar for filters and search, and a right panel for the map.
 - The customer can narrow results by **county and city** (county/city lists come from the `innoship_pudo` table).
+- After a city is selected, a **search input** appears in the sidebar. It filters all currently loaded pins in real time by name, street address, city, and postcode — entirely client-side, with no Magewire roundtrip per keystroke.
+- Search results appear as a dropdown list (capped at 20 matches). Clicking a result pans and zooms the map to that pin and opens its popup, ready for the customer to confirm their choice.
 - If no county is selected but the customer's shipping address has a Romanian region, the map auto-centers on that region and shows points within ~50 km, sorted by distance.
 - Marker icons reflect the courier (Cargus, DPD, FAN, eMag, Posta Romana, etc.).
 - Each marker's popup shows the address, phone number, opening hours, accepted payment methods, and a **"Select This Point"** button.
 
 ![Picker modal with county/city filters and pickup-point markers](media/checkout_second_step.png)
 
-The picker is implemented as two Magewire components, `Magewire\PudoPicker` (modal + filters + map data) and `Magewire\PudoPoint` (selected-point summary), wired together via `emit()` / `$listeners`. The map UI itself is an Alpine.js component (`view/frontend/web/js/pudo-picker.js`).
+The picker is implemented as two Magewire components, `Magewire\PudoPicker` (modal + filters + map data) and `Magewire\PudoPoint` (selected-point summary), wired together via `emit()` / `$listeners`. The map UI itself is an Alpine.js component (`view/frontend/web/js/pudo-picker.js`). The search input uses Hyvä's CSP-safe Alpine binding pattern (`:value` + `@input` instead of `x-model`, which the CSP-friendly Alpine build does not support).
 
 ### 2. Persisted PUDO selection
 
@@ -98,13 +101,32 @@ The session storage key is `innoship_selected_pudo_point` (defined as `INNOSHIP_
 
 ![Selected PUDO displayed in checkout — name, address, payment methods, clear button](media/checkout_third_step.png)
 
-### 3. Pre-submit observer
+### 3. Automatic shipping address clearing on PUDO deselection
+
+When a PUDO is selected, its locker address is written to the quote shipping address. If the customer later deselects the PUDO (either manually or by switching shipping method), that address becomes invalid as a delivery address — it belongs to the locker, not the customer. The module clears the relevant fields automatically in two scenarios.
+
+**Explicit deselection — "Clear PUDO" button**
+
+When the customer clicks the clear button, `Magewire\PudoPoint::clearPudoPoint()` runs. Before wiping the session, it captures the PUDO ID and compares it against the `innoship_pudo_id` column that was stamped onto the quote shipping address when the point was selected. If the two IDs match — meaning the customer has not manually edited the address since picking the locker — the module blanks the shipping address location fields (company, street, city, postcode, region). The customer is then shown an empty shipping-address form and is prompted to enter their real delivery address.
+
+If the IDs do not match — because the customer edited the address form after selecting the PUDO — the location data is left untouched; only the PUDO stamps (`innoship_pudo_id`, `innoship_courier_id`) are removed from the address and the quote. In both cases the PUDO selection is fully cleared from the session and the `innoship-pudo-cleared` event is emitted so the shipping-address form re-renders immediately.
+
+**Shipping method change**
+
+`Magewire\PudoPoint` listens for Hyvä Checkout's `shipping_method_selected` event (emitted by `Hyva\Checkout\Magewire\Checkout\Shipping\MethodList` on every method change). When the event fires and there is a PUDO in the session:
+
+- If the new method is still an InnoShip carrier (method code contains `innoshipcargusgo`), the selection is left in place — the customer may just be switching between InnoShip rate options.
+- Otherwise, `clearPudoPoint()` is called with the same fingerprint logic described above, clearing both the PUDO selection and the locker address fields.
+
+This prevents a stale locker address from being submitted when the customer switches to a home-delivery method.
+
+### 4. Pre-submit observer
 
 `Observer\CheckoutSubmitBefore` listens on `checkout_submit_before` (which fires earlier than the InnoShip module's own `sales_model_service_quote_submit_before` observer). It re-stamps the PUDO data onto the shipping address from the most authoritative available source (quote custom data → session → existing address fields) and saves the quote.
 
 This is defensive: Hyvä's checkout flow has multiple steps that may reload or restore the shipping address, and InnoShip's downstream code expects the PUDO fields to be present *before* its own observer runs. Without this, late address restorations can blank out `innoship_pudo_id` and the AWB generation fails.
 
-### 4. Disabled upstream controllers
+### 5. Disabled upstream controllers
 
 Several `InnoShip_InnoShip` frontend controllers exist only to serve the Luma checkout JS (`view/frontend/web/js/checkout.js`) and have no purpose in a Hyvä-only storefront. Rather than fork or patch `InnoShip_InnoShip`, this module declares DI preferences in `etc/frontend/di.xml` that swap each unused controller class for a shared no-op stub (`Controller/Disabled/NotFound`) which throws `NotFoundException` — every dead URL returns a clean 404.
 
@@ -119,17 +141,17 @@ Disabled endpoints:
 
 The stub implements both `HttpGet`/`HttpPostActionInterface` and `CsrfAwareActionInterface` so POSTs reach the 404 instead of being rejected at 405 / CSRF. Admin AWB controllers (`Adminhtml/Awb/*`) are untouched — the preferences are scoped to `etc/frontend/di.xml`.
 
-### 5. Validation gate
+### 6. Validation gate
 
 `Magewire\PudoPoint` implements Hyvä's `EvaluationInterface`. If the selected shipping method is an InnoShip method, the customer cannot proceed past the shipping step until a pickup point is chosen — Hyvä displays an inline error and emits `shipping:method:error`.
 
-### 6. Order-view PUDO summary
+### 7. Order-view PUDO summary
 
 On the customer's order view page (My Account → Orders), the module overrides InnoShip's `order_info_innoship_front` block with a Hyvä-friendly template (`templates/order/order_shipping_pudo.phtml`). It shows the chosen pickup point's name, address, and "Open in Google Maps" / "Open in Waze" deep links. PUDO lookups go through `ViewModel\PudoInfo`, which reads from the `innoship_pudo` table via this module's repository.
 
 ![Customer order view — pickup point summary with Google Maps and Waze deep links](media/customer_account.png)
 
-### 7. Automatic billing address management
+### 8. Automatic billing address management
 
 When a PUDO point is selected, the module ensures that the billing address is not set to the locker address (which is invalid for invoicing).
 - It automatically sets the "Same as shipping" flag to `false`.
