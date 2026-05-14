@@ -88,6 +88,10 @@ When the customer chooses an InnoShip shipping method (e.g. `innoshipcargusgo_*`
 
 The picker is implemented as two Magewire components, `Magewire\PudoPicker` (modal + filters + map data) and `Magewire\PudoPoint` (selected-point summary), wired together via `emit()` / `$listeners`. The map UI itself is an Alpine.js component (`view/frontend/web/js/pudo-picker.js`). The search input uses Hyvä's CSP-safe Alpine binding pattern (`:value` + `@input` instead of `x-model`, which the CSP-friendly Alpine build does not support).
 
+
+https://github.com/user-attachments/assets/ab9bb712-e995-41bb-8168-59dcf83d6d64
+
+
 ### 2. Persisted PUDO selection
 
 The PUDO selection is **saved to the checkout session** as soon as the customer picks a point — it is not transient UI state. This gives the picker real saving functionality:
