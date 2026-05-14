@@ -97,6 +97,11 @@ class PudoPoint extends Component implements EvaluationInterface
 
     public function clearPudoPoint(): void
     {
+        // Capture the pudo_id BEFORE clearing the session — we need it to
+        // fingerprint the current shipping address and decide whether to blank it.
+        $pudoData = $this->sessionCheckout->getData(self::INNOSHIP_PUDO_SESSION_KEY);
+        $clearedPudoId = is_array($pudoData) ? (string)($pudoData['pudo_id'] ?? '') : '';
+
         $this->pudoId = '';
         $this->pudoName = '';
         $this->pudoAddress = '';
@@ -108,7 +113,10 @@ class PudoPoint extends Component implements EvaluationInterface
         $this->paymentInfo = '';
 
         $this->sessionCheckout->unsetData(self::INNOSHIP_PUDO_SESSION_KEY);
-        $this->restoreOriginalShippingAddress();
+
+        if ($clearedPudoId !== '') {
+            $this->clearShippingAddressIfPudo($clearedPudoId);
+        }
 
         // Notify other Magewire components (e.g. BillingDetails) that the
         // PUDO selection was cleared, so they can unlock UI elements that
@@ -127,29 +135,57 @@ class PudoPoint extends Component implements EvaluationInterface
         return $shippingMethod && strpos($shippingMethod, 'innoshipcargusgo') !== false;
     }
 
-    private function restoreOriginalShippingAddress(): void
+    /**
+     * Blanks the shipping address location fields when the address on the quote
+     * still belongs to the PUDO that was just deselected.
+     *
+     * The comparison uses `innoship_pudo_id` on the quote address — the integer
+     * column stamped by `PudoPicker::updateShippingAddressWithPudo()`. If the
+     * customer manually edited the address form AFTER picking the PUDO, Hyvä's
+     * address-save flow would have written new street/city/postcode values and
+     * cleared the pudo_id in the process; in that case we leave their data alone.
+     *
+     * The PUDO stamps (pudo_id / courier_id) are always removed from both the
+     * address and the quote, regardless of the address comparison result —
+     * the selection is being explicitly cancelled.
+     */
+    private function clearShippingAddressIfPudo(string $pudoId): void
     {
         try {
-            $originalAddressData = $this->sessionCheckout->getData('original_shipping_address');
-            if (!$originalAddressData) return;
-
             $quote = $this->sessionCheckout->getQuote();
             $shippingAddress = $quote->getShippingAddress();
-            if (!$shippingAddress) return;
+            if (!$shippingAddress) {
+                return;
+            }
 
-            $shippingAddress->setCompany($originalAddressData['company'] ?? '');
-            $shippingAddress->setStreet($originalAddressData['street'] ?? []);
-            $shippingAddress->setCity($originalAddressData['city'] ?? '');
-            $shippingAddress->setPostcode($originalAddressData['postcode'] ?? '');
-            $shippingAddress->setCountryId($originalAddressData['country_id'] ?? '');
-            $shippingAddress->setRegionId($originalAddressData['region_id'] ?? null);
-            $shippingAddress->setRegion($originalAddressData['region'] ?? '');
+            // innoship_pudo_id is an INT column — cast both sides to string for a
+            // safe comparison (avoids int/string type juggling on the DB value).
+            $addressPudoId = (string)$shippingAddress->getInnoshipPudoId();
+            $addressMatchesPudo = $addressPudoId !== '' && $addressPudoId === $pudoId;
+
+            if ($addressMatchesPudo) {
+                // The address is still the locker address — blank the location
+                // fields so the shipping form shows empty inputs and the customer
+                // is prompted to enter their real delivery address.
+                $shippingAddress->setCompany('');
+                $shippingAddress->setStreet([]);
+                $shippingAddress->setCity('');
+                $shippingAddress->setPostcode('');
+                $shippingAddress->setRegion('');
+                $shippingAddress->setRegionId(null);
+            }
+
+            // Always remove the PUDO stamps regardless of address match.
             $shippingAddress->setInnoshipPudoId(null);
-            
+            $shippingAddress->setInnoshipCourierId(null);
+            $quote->setInnoshipPudoId(null);
+            $quote->setInnoshipCourierId(null);
+
             $this->quoteRepository->save($quote);
-            $this->sessionCheckout->unsetData('original_shipping_address');
         } catch (\Exception $e) {
-            $this->logger->error('InnoShipHyva: Failed to restore original shipping address: ' . $e->getMessage());
+            $this->logger->error(
+                'InnoShipHyva: Failed to clear shipping address after PUDO deselection: ' . $e->getMessage()
+            );
         }
     }
 }
