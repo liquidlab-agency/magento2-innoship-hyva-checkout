@@ -47,3 +47,6 @@
 "My billing and shipping address are the same","Adresa de facturare este aceeași cu adresa de livrare",module,Liquidlab_InnoShipHyva
 "Billing cannot match shipping when the order is delivered to a pickup point. Please enter a billing address.","Facturarea nu poate coincide cu livrarea atunci când comanda este livrată la un punct de ridicare. Vă rugăm să introduceți o adresă de facturare.",module,Liquidlab_InnoShipHyva
 "PUDO Point","Punct PUDO",module,Liquidlab_InnoShipHyva
+"No matching pickup points","Nu s-au găsit puncte de ridicare potrivite",module,Liquidlab_InnoShipHyva
+"Search","Căutare",module,Liquidlab_InnoShipHyva
+"Search by name, street, city or postcode","Caută după nume, stradă, oraș sau cod poștal",module,Liquidlab_InnoShipHyva
