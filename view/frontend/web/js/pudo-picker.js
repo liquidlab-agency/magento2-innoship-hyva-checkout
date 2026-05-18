@@ -123,9 +123,7 @@
                     this.innoShipData = event.detail.data;
                     this.selectedCounty = event.detail.data.selectedCounty || '';
                     this.selectedCity = event.detail.data.selectedCity || '';
-                    // New pin set from county/city change — stale search results no longer
-                    // correspond to the visible markers, so clear them.
-                    this.resetSearchState();
+                    this.updateMarkers(this.innoShipData.pins || []);
                 }
             },
 
