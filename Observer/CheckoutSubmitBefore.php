@@ -170,30 +170,21 @@ class CheckoutSubmitBefore implements ObserverInterface
      */
     private function updateShippingAddressWithPudoData($shippingAddress, array $pudoData, Quote $quote): void
     {
-        // Parse PUDO address if it's a full address string
-        $addressParts = $this->parsePudoAddress($pudoData['address'] ?? '');
-
-        // Update shipping address with PUDO details
+        // $pudoData already carries street/city/postal_code as dedicated, structured
+        // keys (see PudoPicker::buildSessionPudoData()) - do not re-derive them by
+        // parsing the address string, InnoShip's addressText has no separator that
+        // reliably distinguishes the locality from the street.
         $shippingAddress->setCompany($pudoData['name'] ?? __('PUDO Point')->render());
-        
-        // Set street address
-        if (!empty($addressParts['street'])) {
-            $shippingAddress->setStreet([$addressParts['street']]);
-        } elseif (!empty($pudoData['address'])) {
+
+        if (!empty($pudoData['address'])) {
             $shippingAddress->setStreet([$pudoData['address']]);
         }
 
-        // Set city
-        if (!empty($addressParts['city'])) {
-            $shippingAddress->setCity($addressParts['city']);
-        } elseif (!empty($pudoData['city'])) {
+        if (!empty($pudoData['city'])) {
             $shippingAddress->setCity($pudoData['city']);
         }
 
-        // Set postal code
-        if (!empty($addressParts['postal_code'])) {
-            $shippingAddress->setPostcode($addressParts['postal_code']);
-        } elseif (!empty($pudoData['postal_code'])) {
+        if (!empty($pudoData['postal_code'])) {
             $shippingAddress->setPostcode($pudoData['postal_code']);
         }
 
@@ -226,54 +217,5 @@ class CheckoutSubmitBefore implements ObserverInterface
             $extensionAttributes->setInnoshipShippingPrice((float)$pudoData['shipping_price']);
         }
         $shippingAddress->setExtensionAttributes($extensionAttributes);
-    }
-
-    /**
-     * Parse PUDO address string into components
-     * Expected format: "CITY, Street Name, Nr. X, Postal Code"
-     * 
-     * @param string $address
-     * @return array
-     */
-    private function parsePudoAddress(string $address): array
-    {
-        $result = [
-            'city' => '',
-            'street' => '',
-            'postal_code' => ''
-        ];
-
-        if (empty($address)) {
-            return $result;
-        }
-
-        try {
-            // Split by comma and clean up parts
-            $parts = array_map('trim', explode(',', $address));
-            
-            if (count($parts) >= 1) {
-                $result['city'] = $parts[0];
-            }
-            
-            if (count($parts) >= 2) {
-                // Combine street parts (everything except first and last if postal code is present)
-                $streetParts = array_slice($parts, 1);
-                
-                // Check if last part looks like a postal code (digits)
-                $lastPart = end($streetParts);
-                if (preg_match('/\b\d{6}\b/', $lastPart)) {
-                    $result['postal_code'] = trim(preg_replace('/.*?(\d{6}).*/', '$1', $lastPart));
-                    array_pop($streetParts); // Remove postal code from street parts
-                }
-                
-                $result['street'] = implode(', ', $streetParts);
-            }
-            
-        } catch (\Exception $e) {
-            $this->logger->warning('InnoShipHyva CheckoutSubmitBefore: Failed to parse PUDO address: ' . $e->getMessage());
-            $result['street'] = $address; // Fallback to full address
-        }
-
-        return $result;
     }
 }
