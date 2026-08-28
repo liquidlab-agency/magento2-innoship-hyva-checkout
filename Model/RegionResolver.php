@@ -87,14 +87,54 @@ class RegionResolver
     }
 
     /**
-     * Lowercase + strip diacritics for forgiving lookup.
+     * Fold a region/county name to a forgiving, locale-INDEPENDENT lookup key.
+     *
+     * Do NOT reintroduce iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', …) here.
+     * That transliteration is governed by the process LC_CTYPE locale:
+     *   - under a UTF-8 locale (e.g. staging's C.UTF-8) glibc folds
+     *     "Constanța" → "constanta" and the match succeeds;
+     *   - under the bare C / POSIX locale (common on production PHP-FPM) glibc
+     *     cannot transliterate and emits the placeholder "constan?a", so the
+     *     ASCII InnoShip name "Constanta" never matches and region_id resolves
+     *     to NULL for EVERY county whose Magento name carries a diacritic
+     *     (22 of 42 RO counties, incl. București and Constanța).
+     * That locale split was the entire prod-vs-staging divergence: identical
+     * bytes, different LC_CTYPE. See Test/Unit/Model/RegionResolverTest.php,
+     * which pins LC_ALL=C to reproduce the production condition.
+     *
+     * Two locale-independent steps, applied to BOTH sides of the comparison:
+     *   1. Diacritic fold — intl Normalizer NFD splits every accented letter
+     *      into base + combining mark; strip the combining marks (\p{Mn}). This
+     *      folds all Romanian forms — comma-below (ș U+0219, ț U+021B), legacy
+     *      cedilla (ş U+015F, ţ U+0163) and ă/â/î — to plain ASCII, under any
+     *      locale. ext-intl (hence \Normalizer) is a hard Magento requirement,
+     *      so this is always available; we still guard defensively.
+     *   2. Separator fold — collapse runs of whitespace/hyphen to a single
+     *      space. The InnoShip feed and Magento's directory disagree on the
+     *      separator for multi-word counties: InnoShip sends "Satu Mare" (space)
+     *      where Magento stores "Satu-Mare" (hyphen), so without this the two
+     *      never match and region_id is NULL for every Satu Mare locker — a
+     *      separator bug orthogonal to (and older than) the diacritic one. This
+     *      also future-proofs "Bistrița-Năsăud" / "Caraș-Severin".
      */
     private function normalize(string $value): string
     {
-        $stripped = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
-        if ($stripped === false) {
-            $stripped = $value;
+        $value = trim($value);
+        if ($value === '') {
+            return '';
         }
-        return strtolower(trim($stripped));
+
+        // 1. Locale-independent diacritic fold.
+        if (class_exists(\Normalizer::class)) {
+            $decomposed = \Normalizer::normalize($value, \Normalizer::FORM_D);
+            if ($decomposed !== false) {
+                $value = preg_replace('/\p{Mn}+/u', '', $decomposed) ?? $value;
+            }
+        }
+
+        // 2. Separator-insensitive: "Satu Mare" ≡ "Satu-Mare".
+        $value = preg_replace('/[\s\-]+/u', ' ', $value) ?? $value;
+
+        return mb_strtolower(trim($value), 'UTF-8');
     }
 }
