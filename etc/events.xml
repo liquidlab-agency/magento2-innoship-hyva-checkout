@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+
+    <!--
+        Hard backstop against placing an InnoShip locker order with no pickup
+        point. Global (all areas) so it also covers REST/GraphQL order placement,
+        not just the storefront checkout. Runs after checkout_submit_before, so
+        CheckoutSubmitBefore's session re-stamp gets its chance first.
+    -->
+    <event name="sales_model_service_quote_submit_before">
+        <observer name="InnoShipHyva_ValidatePudoOnQuoteSubmit"
+                  instance="Liquidlab\InnoShipHyva\Observer\ValidatePudoOnQuoteSubmit"/>
+    </event>
+</config>

@@ -105,4 +105,18 @@
                 type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\LockBillingAsShippingForPudo"
                 sortOrder="10"/>
     </type>
+
+    <!--
+        Clear a stale locker pickup point when the customer switches to a
+        non-locker shipping method. PudoPoint leaves the DOM the moment the
+        locker method is deselected, so it can't clean up after itself; without
+        this the locker address + innoship_pudo_id persist on the quote and the
+        AWB still routes the parcel to the EasyBox. Runs server-side in the same
+        roundtrip that saves the new shipping method.
+    -->
+    <type name="Hyva\Checkout\Magewire\Checkout\Shipping\MethodList">
+        <plugin name="liquidlab_innoshiphyva_clear_pudo_on_shipping_change"
+                type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\ClearPudoOnShippingMethodChange"
+                sortOrder="10"/>
+    </type>
 </config>

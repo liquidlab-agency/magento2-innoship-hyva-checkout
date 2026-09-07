@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Copyright © - LiquidLab Agency - All rights reserved.
  * See LICENSE.txt for license details.
@@ -12,6 +13,7 @@ use Liquidlab\InnoShipHyva\Model\Config\PaymentRestrictionConfig;
 use Magento\Payment\Model\MethodInterface;
 use Magento\Payment\Model\MethodList;
 use Magento\Quote\Api\Data\CartInterface;
+use Magento\Quote\Model\Quote;
 use Magento\Store\Model\StoreManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -44,7 +46,9 @@ class PaymentMethodRestriction
     }
 
     /**
+     * @param MethodList $subject
      * @param MethodInterface[] $availableMethods
+     * @param CartInterface|null $quote
      * @return MethodInterface[]
      */
     public function afterGetAvailableMethods(
@@ -56,17 +60,26 @@ class PaymentMethodRestriction
             return $availableMethods;
         }
 
+        // Callers (Magento\Quote\Model\PaymentMethodManagement::getList) always pass
+        // the concrete Quote; narrow so the pudo/shipping magic getters resolve.
+        /** @var Quote $quote */
         $shippingAddress = $quote->getShippingAddress();
-        if (!$shippingAddress) {
-            return $availableMethods;
-        }
-
         $shippingMethod = (string)$shippingAddress->getShippingMethod();
         if ($shippingMethod === '') {
             return $availableMethods;
         }
 
         $carrierCode = $this->extractCarrierCode($shippingMethod);
+
+        // A stamped pickup point means the parcel is routed to a locker by the
+        // AWB (InnoShip reads innoship_pudo_id) regardless of the shipping_method
+        // label. Enforce the locker carrier's allowlist whenever a pudo is set, so
+        // the payment list cannot drift back to cash-on-delivery after a payment /
+        // shipping-method reload leaves a locker stamped on a non-locker method.
+        if ((int)$shippingAddress->getInnoshipPudoId() > 0) {
+            $carrierCode = PaymentRestrictionConfig::LOCKER_CARRIER_CODE;
+        }
+
         if (!$this->config->isRestrictionSupported($carrierCode)) {
             // Not an InnoShip carrier we filter on — pass through unchanged.
             return $availableMethods;
