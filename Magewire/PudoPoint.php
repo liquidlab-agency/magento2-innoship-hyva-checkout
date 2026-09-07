@@ -45,19 +45,31 @@ class PudoPoint extends Component implements EvaluationInterface
     {
         try {
             $quote = $this->sessionCheckout->getQuote();
-            $shippingMethod = $quote->getShippingAddress()->getShippingMethod();
-            
+            $shippingAddress = $quote->getShippingAddress();
+            $shippingMethod = $shippingAddress->getShippingMethod();
+
             if (!$this->isInnoShipShippingMethod($shippingMethod)) {
                 return $resultFactory->createSuccess();
             }
 
-            if (empty($this->pudoId)) {
+            // Validate against the authoritative quote value, NOT $this->pudoId.
+            // The public Magewire property is hydrated from the client snapshot on
+            // every roundtrip and is only refreshed from the session on mount() /
+            // onPudoSelected(). If the customer picks a locker and then edits the
+            // shipping address (Hyvä's address-save clears innoship_pudo_id on the
+            // quote — see clearShippingAddressIfPudo()), $this->pudoId stays stale
+            // and this gate would wrongly pass, letting a locker order through with
+            // no pickup point (parcel ships to the plain address). The quote's
+            // innoship_pudo_id is the single source of truth for "a locker was
+            // actually selected". A hard server-side backstop lives in
+            // Observer\ValidatePudoOnQuoteSubmit for non-UI order paths.
+            if ((int)$shippingAddress->getInnoshipPudoId() < 1) {
                 return $resultFactory->createErrorMessageEvent((string)__('Please select a pickup point location.'))
                     ->withCustomEvent('shipping:method:error');
             }
 
             return $resultFactory->createSuccess();
-            
+
         } catch (\Exception $e) {
             $this->logger->error('InnoShipHyva PudoPoint evaluation error: ' . $e->getMessage());
             return $resultFactory->createErrorMessageEvent((string)__('An error occurred while processing the pickup point selection.'))

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ *
+ * Module-local unit config. This package is named magento2-innoship-hyva-checkout,
+ * NOT module-*, so the project's dev/tests/unit/phpunit.xml.dist glob
+ * (vendor/*/module-*/Test/Unit) never picks it up. Invoke directly:
+ *
+ *   bin/clinotty php vendor/bin/phpunit -c \
+ *     vendor/liquidlab-agency/magento2-innoship-hyva-checkout/phpunit.xml.dist
+ *
+ * Unit tests only — never add Test/Integration here (the Magento integration
+ * framework drops the shared DB).
+ */
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd"
+         bootstrap="../../autoload.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="Liquidlab InnoShipHyva Unit Tests">
+            <directory>Test/Unit</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

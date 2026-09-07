@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Copyright © - LiquidLab Agency - All rights reserved.
  * See LICENSE.txt for license details.
@@ -32,12 +33,19 @@ use Magento\Store\Model\ScopeInterface;
 class PaymentRestrictionConfig
 {
     /**
+     * The InnoShip carrier code that delivers to a locker / EasyBox pickup point.
+     * A stamped innoship_pudo_id always belongs to this carrier, whatever the
+     * shipping_method label happens to read.
+     */
+    public const LOCKER_CARRIER_CODE = 'innoshipcargusgo';
+
+    /**
      * Carrier code → store-config path of the allowlist multiselect.
      *
      * @var array<string, string>
      */
     private const CONFIG_PATHS = [
-        'innoshipcargusgo' => 'carriers/innoshipcargusgo/innoship_cargus_go_payment_restriction',
+        self::LOCKER_CARRIER_CODE => 'carriers/innoshipcargusgo/innoship_cargus_go_payment_restriction',
     ];
 
     public function __construct(
