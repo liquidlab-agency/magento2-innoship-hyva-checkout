@@ -10,7 +10,7 @@ declare(strict_types=1);
 namespace Liquidlab\InnoShipHyva\Test\Unit\Plugin\HyvaCheckout;
 
 use Exception;
-use Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\SuppressShippingAutoSelectForLocker;
+use Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\PreserveChosenShippingMethod;
 use Magento\Checkout\Model\Session as SessionCheckout;
 use Magento\Framework\DataObject;
 use Magento\Quote\Model\Quote;
@@ -20,28 +20,30 @@ use Psr\Log\LoggerInterface;
 use stdClass;
 
 /**
- * Fix E gate. Hyvä's auto-select-first-shipping (gated by
- * enableFirstAvailableShippingMethod) must be suppressed for the current
- * roundtrip when — and only when — a locker method is already selected, so a
- * mere payment-method change cannot silently flip the customer's locker to the
- * first courier rate and strand the pudo.
+ * Hyvä's auto-select-first-shipping (gated by enableFirstAvailableShippingMethod)
+ * must be suppressed for the current roundtrip whenever a shipping method is already
+ * selected — locker OR courier — so a mere payment-method change cannot silently flip
+ * the customer's choice to the first (cheapest) rate. Both directions matter: flipping
+ * a locker to the first courier strands the pudo, and flipping a courier to the first
+ * locker restricts payment to the locker's prepaid allowlist and drops cash-on-delivery.
+ * Only a method-less quote still gets Hyvä's auto-select convenience.
  *
  * The config subject is irrelevant to the decision (we only re-evaluate the
  * boolean it returned against the live quote), so a bare stdClass stands in for
  * Hyvä's namespaced SystemConfigExperimental.
  */
-class SuppressShippingAutoSelectForLockerTest extends TestCase
+class PreserveChosenShippingMethodTest extends TestCase
 {
     private const LOCKER_METHOD = 'innoshipcargusgo_innoshipcargusgo_1';
     private const COURIER_METHOD = 'innoship_1';
 
     private SessionCheckout&MockObject $sessionCheckout;
-    private SuppressShippingAutoSelectForLocker $plugin;
+    private PreserveChosenShippingMethod $plugin;
 
     protected function setUp(): void
     {
         $this->sessionCheckout = $this->createMock(SessionCheckout::class);
-        $this->plugin = new SuppressShippingAutoSelectForLocker(
+        $this->plugin = new PreserveChosenShippingMethod(
             $this->sessionCheckout,
             $this->createMock(LoggerInterface::class)
         );
@@ -66,11 +68,14 @@ class SuppressShippingAutoSelectForLockerTest extends TestCase
         );
     }
 
-    public function testKeepsEnabledForCourierMethod(): void
+    public function testSuppressesWhenCourierSelected(): void
     {
+        // A courier the customer chose must survive too: otherwise any payment
+        // change auto-flips it to the first (cheapest) locker rate, which then
+        // restricts payment to the locker allowlist and drops cash-on-delivery.
         $this->stubQuoteMethod(self::COURIER_METHOD);
 
-        $this->assertTrue(
+        $this->assertFalse(
             $this->plugin->afterEnableFirstAvailableShippingMethod(new stdClass(), true)
         );
     }
