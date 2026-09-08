@@ -11,4 +11,22 @@
                 type="Liquidlab\InnoShipHyva\Model\Pudo"/>
     <preference for="Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface"
                 type="Liquidlab\InnoShipHyva\Model\PudoRepository"/>
+
+    <!--
+        Global backstop: clear a stale locker pickup point when the shipping
+        method is set to a non-locker carrier through ANY path that reaches the
+        quote service directly — Hyvä's auto-select-first-shipping, REST
+        /carts/{id}/selected-shipping-method and /shipping-information, GraphQL
+        setShippingMethodsOnCart, admin order create, custom code. These bypass
+        Hyvä's Magewire MethodList::updatedMethod (where
+        ClearPudoOnShippingMethodChange lives), so without this the pudo stays
+        stamped on a courier quote and the AWB still routes to the EasyBox.
+        Declared here (not etc/frontend) precisely so the non-storefront callers
+        are covered too.
+    -->
+    <type name="Magento\Quote\Api\ShippingMethodManagementInterface">
+        <plugin name="liquidlab_innoshiphyva_clear_stale_pudo_on_method_set"
+                type="Liquidlab\InnoShipHyva\Plugin\Quote\ClearStalePudoOnShippingMethodSet"
+                sortOrder="10"/>
+    </type>
 </config>
