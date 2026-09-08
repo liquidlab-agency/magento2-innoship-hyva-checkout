@@ -10,6 +10,7 @@ namespace Liquidlab\InnoShipHyva\Magewire;
 
 use Liquidlab\InnoShipHyva\Api\Data\PudoInterface;
 use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
+use Liquidlab\InnoShipHyva\Model\Config\PaymentRestrictionConfig;
 use Liquidlab\InnoShipHyva\Model\RegionCoordinatesProvider;
 use Liquidlab\InnoShipHyva\Model\RegionResolver;
 use Magento\Checkout\Model\Session as SessionCheckout;
@@ -70,6 +71,23 @@ class PudoPicker extends Component
             $quote = $this->sessionCheckout->getQuote();
             $shippingAddress = $quote->getShippingAddress();
             if (!$shippingAddress) {
+                return;
+            }
+
+            // Never re-stamp the session's locker pudo onto a quote that is no
+            // longer on a locker method. PudoPicker's block renders on every
+            // checkout load (before.body.end), so mount() runs even after Hyvä's
+            // auto-select flipped the method to a courier or the customer switched
+            // away — reconciling here would recreate the stale-pudo-on-courier
+            // state that hides cash-on-delivery and mis-routes the AWB to the
+            // EasyBox. An empty method is left to reconcile (the genuine
+            // "restore a lost selection on a fresh quote" case). Clearing the
+            // courier quote's pudo is owned by ClearStalePudoOnShippingMethodSet /
+            // ClearPudoOnShippingMethodChange.
+            $shippingMethod = (string)$shippingAddress->getShippingMethod();
+            if ($shippingMethod !== ''
+                && strpos($shippingMethod, PaymentRestrictionConfig::LOCKER_CARRIER_CODE) === false
+            ) {
                 return;
             }
 

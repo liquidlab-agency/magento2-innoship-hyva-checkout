@@ -119,4 +119,24 @@
                 type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\ClearPudoOnShippingMethodChange"
                 sortOrder="10"/>
     </type>
+
+    <!--
+        Stop Hyvä's auto-select-first-shipping from silently clobbering a shipping
+        method the customer already chose. HyvaCheckoutHyvaCheckoutInitAfter fires on
+        every hyva_checkout_init_after — including every payment-method change — and
+        calls the PRIVATE setFirstAvailableShippingMethod(), which we cannot
+        intercept and which writes the first (cheapest) rate without preserving the
+        current choice. Its only gate, enableFirstAvailableShippingMethod(), is
+        public and read nowhere else, so we suppress it for the single roundtrip
+        whenever a method is already selected — locker OR courier. This stops both a
+        chosen locker being flipped to a courier (stranding the pudo) AND a chosen
+        courier being flipped to the first locker (which removes cash-on-delivery).
+        Plugged on the canonical Developer class; plugin inheritance carries it to
+        the deprecated alias the observer uses.
+    -->
+    <type name="Hyva\Checkout\Model\ConfigData\HyvaThemes\Developer\SystemConfigExperimental">
+        <plugin name="liquidlab_innoshiphyva_preserve_chosen_shipping_method"
+                type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\PreserveChosenShippingMethod"
+                sortOrder="10"/>
+    </type>
 </config>
