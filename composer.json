@@ -2,7 +2,7 @@
     "name": "liquidlab-agency/magento2-innoship-hyva-checkout",
     "description": "Hyva Checkout compatibility module for InnoShip (https://innoship.com/)",
     "type": "magento2-module",
-    "license": "proprietary",
+    "license": "MIT",
     "authors": [
         {
             "name": "Liquidlab Agency",

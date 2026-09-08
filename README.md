@@ -219,7 +219,7 @@ Whether it’s custom Hyvä implementations, store migrations, rescue projects f
 
 ## License
 
-**Proprietary** — © Liquidlab Agency. All rights reserved.
+**MIT** — © 2026 LiquidLab Agency. Free to use, modify, and distribute; provided **"as is"**, without warranty of any kind and with no liability. See [LICENSE.txt](LICENSE.txt) for the full terms.
 
 ---
 
