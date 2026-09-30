@@ -11,7 +11,7 @@ namespace Liquidlab\InnoShipHyva\Test\Unit\Magewire;
 
 use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
 use Liquidlab\InnoShipHyva\Magewire\PudoPicker;
-use Liquidlab\InnoShipHyva\Model\RegionCoordinatesProvider;
+use Liquidlab\InnoShipHyva\Model\PudoPointsProvider;
 use Liquidlab\InnoShipHyva\Model\RegionResolver;
 use Magento\Checkout\Model\Session as SessionCheckout;
 use Magento\Framework\DataObject;
@@ -56,7 +56,7 @@ class PudoPickerReconcileTest extends TestCase
             $this->sessionCheckout,
             $this->createMock(LoggerInterface::class),
             $this->pudoRepository,
-            $this->createMock(RegionCoordinatesProvider::class),
+            $this->createMock(PudoPointsProvider::class),
             $this->createMock(RegionResolver::class),
             $this->createMock(AddressExtensionFactory::class)
         );
