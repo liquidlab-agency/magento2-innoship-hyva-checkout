@@ -50,3 +50,4 @@
 "No matching pickup points","Nu s-au găsit puncte de ridicare potrivite",module,Liquidlab_InnoShipHyva
 "Search","Căutare",module,Liquidlab_InnoShipHyva
 "Search by name, street, city or postcode","Caută după nume, stradă, oraș sau cod poștal",module,Liquidlab_InnoShipHyva
+"This pickup point is no longer available. Please select another one.","Acest punct de ridicare nu mai este disponibil. Vă rugăm să selectați altul.",module,Liquidlab_InnoShipHyva

@@ -80,13 +80,22 @@ When the customer chooses an InnoShip shipping method (e.g. `innoshipcargusgo_*`
 - The customer can narrow results by **county and city** (county/city lists come from the `innoship_pudo` table).
 - After a city is selected, a **search input** appears in the sidebar. It filters all currently loaded pins in real time by name, street address, city, and postcode — entirely client-side, with no Magewire roundtrip per keystroke.
 - Search results appear as a dropdown list (capped at 20 matches). Clicking a result pans and zooms the map to that pin and opens its popup, ready for the customer to confirm their choice.
-- If no county is selected but the customer's shipping address has a Romanian region, the map auto-centers on that region and shows points within ~50 km, sorted by distance.
+- If no county is selected but the customer's shipping address has a Romanian region, the map auto-centers on that region and shows points within ~50 km, sorted by distance. The region is read when the map opens, so an address entered after the page loaded counts too.
 - Marker icons reflect the courier (Cargus, DPD, FAN, eMag, Posta Romana, etc.).
 - Each marker's popup shows the address, phone number, opening hours, accepted payment methods, and a **"Select This Point"** button.
 
 ![Picker modal with county/city filters and pickup-point markers](media/checkout_second_step.png)
 
-The picker is implemented as two Magewire components, `Magewire\PudoPicker` (modal + filters + map data) and `Magewire\PudoPoint` (selected-point summary), wired together via `emit()` / `$listeners`. The map UI itself is an Alpine.js component (`view/frontend/web/js/pudo-picker.js`). The search input uses Hyvä's CSP-safe Alpine binding pattern (`:value` + `@input` instead of `x-model`, which the CSP-friendly Alpine build does not support).
+The picker is implemented as two Magewire components, `Magewire\PudoPicker` (modal + filters + search context) and `Magewire\PudoPoint` (selected-point summary), wired together via `emit()` / `$listeners`. The map UI itself is an Alpine.js component (`view/frontend/web/js/pudo-picker.js`). The search input uses Hyvä's CSP-safe Alpine binding pattern (`:value` + `@input` instead of `x-model`, which the CSP-friendly Alpine build does not support).
+
+The pickup points are not part of the checkout page or of any Magewire update. Around Bucharest they are close to 2 MB of JSON. When the map opens, the Alpine component fetches them from `GET innoshiphyva/pudo/points` (`Controller\Pudo\Points`, `Model\PudoPointsProvider`):
+
+- `?county=…&city=…` returns the active points in that city;
+- `?region_id=…` returns the active points within 50 km of that Romanian region's centre, nearest first, plus the centre as `customerLocation`.
+
+The answer depends on the query only, never on the session. It is cached for an hour in the Magento cache (under the collections tag, so a cache flush clears it) and in the browser (`Cache-Control: public, max-age=3600`). `PudoPicker` only sends the Alpine component the search context (county, city, shipping region), in `data-` attributes on first render and in the `innoship-pudo-data-updated` browser event after a county or city change and when the map opens.
+
+The Alpine component keeps the Leaflet map, its markers and the pin list outside its reactive data. Alpine wraps its data in proxies, and Leaflet unregisters event listeners by object identity; through a proxy, a closed popup's zoom handler stayed registered and the next zoom threw `Cannot read properties of null (reading '_latLngToNewLayerPoint')`. Closing the modal also finishes a running zoom animation before `map.remove()`, which otherwise threw `reading '_leaflet_pos'`.
 
 
 https://github.com/user-attachments/assets/ab9bb712-e995-41bb-8168-59dcf83d6d64
@@ -100,6 +109,7 @@ The PUDO selection is **saved to the checkout session** as soon as the customer 
 - It survives full page reloads. If the customer refreshes mid-checkout or returns to checkout in the same session, the picker remounts with the previously chosen point already selected and displayed — no need to re-pick.
 - The selection is also written to the quote shipping address (`innoship_pudo_id`, `innoship_courier_id`, plus extension attributes) and the address fields are rewritten to the pickup point's address. This is required because InnoShip's AWB-generation code reads the destination from the shipping address.
 - On `PudoPicker` mount, the component reconciles the quote shipping address against the session: if the session holds a selected PUDO whose ID is missing from the current quote address, it re-applies the selection so order submission carries the PUDO ID. The check is idempotent (early-returns when the IDs already match) so it does not trigger redundant quote saves.
+- Only active pickup points can be selected or ordered to. The map's points are cached, so it can still show a locker that Innoship has deactivated or removed since. Choosing one shows "This pickup point is no longer available. Please select another one.", changes nothing and drops the point from the map. `Observer\ValidatePudoOnQuoteSubmit` rejects such a point again when the order is placed, on every order path, and the mount-time reconciliation never re-applies one.
 
 The session storage key is `innoship_selected_pudo_point` (defined as `INNOSHIP_PUDO_SESSION_KEY` in `Magewire\PudoPicker` and `Magewire\PudoPoint`). The customer can clear the selection at any time using the **"Clear PUDO"** button shown next to the chosen point.
 
@@ -180,6 +190,7 @@ The module ensures that the available payment methods are always in sync with th
 | Marker images and bundled Leaflet 1.9.4 assets | `InnoShip_InnoShip::images/...`, `InnoShip_InnoShip::js/leaflet.js` |
 | Hyvä-compatible PUDO picker UI + modal | This module |
 | Magewire components + Alpine map controller | This module |
+| Cached pickup-point JSON for the map (`innoshiphyva/pudo/points`) | This module |
 | Payment method filtering and refresh logic | This module |
 | Pre-submit safety observer | This module |
 | Disabling unused `InnoShip_InnoShip` frontend controllers via DI preferences | This module |

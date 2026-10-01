@@ -4,45 +4,105 @@
  *
  * Alpine.js component for the InnoShip PUDO picker map modal.
  *
- * The component is registered globally as `innoShipPudoPicker` and consumes a
- * configuration object exposed via `window.innoShipPudoPickerConfig` set by the
- * phtml template before this script runs.
+ * The component is registered globally as `innoShipPudoPicker`. The phtml
+ * template passes its settings in `data-` attributes on the component root:
+ * `data-config` (icons, Leaflet assets, translations, the points endpoint URL)
+ * and the search context (`data-county`, `data-city`, `data-region-id`).
+ * The pickup points are fetched from the endpoint when the map opens.
  */
 (function () {
     'use strict';
 
     function factory() {
-        const cfg = window.innoShipPudoPickerConfig || {};
+        // Leaflet objects and the pin list live here, outside Alpine's reactive
+        // data. Alpine wraps its data in proxies, while Leaflet matches event
+        // listeners by object identity: through a proxy, a closed popup's zoom
+        // handler was never removed, and the next zoom threw
+        // "Cannot read properties of null (reading '_latLngToNewLayerPoint')".
+        let map = null;
+        let markers = {};           // pudo_id (string) → Leaflet Marker, for pan + openPopup
+        let leafletIcons = {};
+        let pins = [];
+        let customerLocation = null;
+        let loadedPinsUrl = null;   // the endpoint URL the current pins came from
+        let wantedPinsUrl = null;   // the endpoint URL of the latest request
+        let drawnPinsUrl = null;    // the endpoint URL of the pins on the map
+        let pinsPromise = null;
+        let resourcesPromise = null;
+
+        function destroyMap() {
+            if (!map) return;
+
+            const leafletMap = map;
+            map = null;
+            markers = {};
+            drawnPinsUrl = null;
+
+            // Leaflet ends an animated zoom on a timer that reads the map pane,
+            // which remove() deletes ("reading '_leaflet_pos'"). Finish the
+            // animation first, so closing the modal mid-zoom is safe.
+            if (leafletMap._animatingZoom && typeof leafletMap._onZoomTransitionEnd === 'function') {
+                leafletMap._onZoomTransitionEnd();
+            }
+            leafletMap.remove();
+        }
+
+        function fetchPins(url) {
+            return window.fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error('Pickup points request failed: HTTP ' + response.status);
+                    }
+                    return response.json();
+                });
+        }
 
         return {
             // Component State
             isMapLoading: false,
-            showModal: !!cfg.initialShowModal,
+            showModal: false,
             mapInitialized: false,
             mapError: null,
-            mapInstance: null,
 
             // Search State
-            selectedCounty: cfg.initialSelectedCounty || '',
-            selectedCity: cfg.initialSelectedCity || '',
+            selectedCounty: '',
+            selectedCity: '',
+            regionId: '',
 
-            // Data + assets injected by the server
-            innoShipData: cfg.innoShipData || { pins: [], counties: [], cities: [] },
-            iconUrls: cfg.iconUrls || {},
-            leafletAssets: cfg.leafletAssets || { js: '', css: '' },
-            translations: cfg.translations || {},
-            leafletIcons: {},
+            // Settings from the template's data-config
+            iconUrls: {},
+            leafletAssets: { js: '', css: '' },
+            translations: {},
+            pointsUrl: '',
 
             // Search state — all client-side, no Magewire roundtrips
             searchQuery: '',
             searchResults: [],   // filtered pins visible in the dropdown, capped at 20
-            markers: {},         // pudo_id (string) → Leaflet Marker, for pan + openPopup
             showSearchResults: false,
             showNoResultsRow: false,
             searchPlaceholderText: '',
             noResultsText: '',
 
             init() {
+                const data = this.$el.dataset;
+                let cfg = {};
+                try {
+                    cfg = JSON.parse(data.config || '{}');
+                } catch (e) {
+                    cfg = {};
+                }
+
+                this.iconUrls = cfg.iconUrls || {};
+                this.leafletAssets = cfg.leafletAssets || { js: '', css: '' };
+                this.translations = cfg.translations || {};
+                this.pointsUrl = cfg.pointsUrl || '';
+                this.showModal = !!data.showModal;
+                this.applyContext({
+                    selectedCounty: data.county,
+                    selectedCity: data.city,
+                    regionId: data.regionId
+                });
+
                 this.initLeafletIcons();
 
                 // Hydrate translation strings used by the search dropdown.
@@ -60,8 +120,11 @@
                     this.$watch('searchQuery', () => this.recomputeSearchResults());
 
                     this.$watch('showModal', (value) => {
+                        // A method call, not $wire.set('showModal'): Magewire's
+                        // $set skips the updated* hooks, and opening the map
+                        // has to send back the current context.
                         if (this.$wire) {
-                            this.$wire.set('showModal', value);
+                            this.$wire.setModalOpen(value);
                         }
                     });
 
@@ -69,6 +132,10 @@
                         this.openMapModal();
                     }
                 });
+            },
+
+            destroy() {
+                destroyMap();
             },
 
             syncStateWithMagewire() {
@@ -81,7 +148,7 @@
                 this.selectedCity = wire.get('selectedCity') || '';
                 this.showModal = !!wire.get('showModal');
 
-                if (window.L && Object.keys(this.leafletIcons).length === 0) {
+                if (window.L && Object.keys(leafletIcons).length === 0) {
                     this.initLeafletIcons();
                 }
             },
@@ -101,7 +168,7 @@
 
                 Object.keys(sizes).forEach((key) => {
                     if (this.iconUrls[key]) {
-                        this.leafletIcons[key] = window.L.icon({
+                        leafletIcons[key] = window.L.icon({
                             iconUrl: this.iconUrls[key],
                             iconSize: sizes[key].size,
                             iconAnchor: sizes[key].anchor,
@@ -112,19 +179,41 @@
             },
 
             // Event Handlers
-            onPudoPointsUpdated(event) {
-                if (event.detail && event.detail.pins) {
-                    this.updateMarkers(event.detail.pins);
+
+            /**
+             * Magewire sends the search context (county, city, shipping region)
+             * after a county or city change and when the map opens. The pins for
+             * a new context come from the points endpoint.
+             */
+            onPudoDataUpdated(event) {
+                if (!event.detail || !event.detail.data) return;
+
+                this.applyContext(event.detail.data);
+                if (this.showModal) {
+                    this.refreshPins();
                 }
             },
 
-            onPudoDataUpdated(event) {
-                if (event.detail && event.detail.data) {
-                    this.innoShipData = event.detail.data;
-                    this.selectedCounty = event.detail.data.selectedCounty || '';
-                    this.selectedCity = event.detail.data.selectedCity || '';
-                    this.updateMarkers(this.innoShipData.pins || []);
+            /**
+             * Magewire turned down a point that Innoship has deactivated or
+             * removed since the pins were cached: drop it from the map.
+             */
+            onPudoUnavailable(event) {
+                const pudoId = String((event.detail && event.detail.pudoId) || '');
+                if (!pudoId) return;
+
+                pins = pins.filter((pin) => String(pin.pudo_id) !== pudoId);
+                if (map && markers[pudoId]) {
+                    map.removeLayer(markers[pudoId]);
                 }
+                delete markers[pudoId];
+            },
+
+            applyContext(context) {
+                const regionId = parseInt(context.regionId, 10);
+                this.selectedCounty = context.selectedCounty || '';
+                this.selectedCity = context.selectedCity || '';
+                this.regionId = regionId > 0 ? String(regionId) : '';
             },
 
             updateSelectedCounty(event) {
@@ -153,37 +242,104 @@
             },
 
             hasNoCustomerLocation() {
-                return !this.innoShipData.customerLocation;
+                return !customerLocation;
             },
 
-            updateMarkers(pins) {
-                this.innoShipData.pins = pins;
-                this.resetSearchState();   // markers map rebuilt by addMapMarkers() below
-                if (!this.mapInstance) return;
+            /**
+             * The endpoint URL for the current context: the chosen city's points,
+             * or else the points near the shipping region. Empty when neither is
+             * known; the map then opens on its default view without pins.
+             */
+            getPinsUrl() {
+                let query = '';
+                if (this.selectedCounty && this.selectedCity) {
+                    query = 'county=' + encodeURIComponent(this.selectedCounty) +
+                        '&city=' + encodeURIComponent(this.selectedCity);
+                } else if (this.regionId) {
+                    query = 'region_id=' + encodeURIComponent(this.regionId);
+                }
 
-                this.mapInstance.eachLayer((layer) => {
+                if (!query || !this.pointsUrl) return '';
+                return this.pointsUrl + (this.pointsUrl.indexOf('?') === -1 ? '?' : '&') + query;
+            },
+
+            /**
+             * Loads the pins for the current context. Resolves to true when the
+             * pin list changed; an answer for an older context is dropped.
+             */
+            loadPins() {
+                const url = this.getPinsUrl();
+                if (url === loadedPinsUrl) {
+                    // Back on the loaded context: drop an answer still on its way for another one.
+                    wantedPinsUrl = url;
+                    pinsPromise = null;
+                    return Promise.resolve(false);
+                }
+                if (url === wantedPinsUrl && pinsPromise) {
+                    return pinsPromise;
+                }
+
+                wantedPinsUrl = url;
+                pinsPromise = (url ? fetchPins(url) : Promise.resolve({})).then((data) => {
+                    if (url !== wantedPinsUrl) {
+                        return false;
+                    }
+                    loadedPinsUrl = url;
+                    pinsPromise = null;
+                    pins = Array.isArray(data.pins) ? data.pins : [];
+                    customerLocation = data.customerLocation || null;
+                    return true;
+                }, (error) => {
+                    if (url === wantedPinsUrl) {
+                        wantedPinsUrl = null;
+                        pinsPromise = null;
+                    }
+                    throw error;
+                });
+
+                return pinsPromise;
+            },
+
+            async refreshPins() {
+                try {
+                    if (await this.loadPins()) {
+                        this.updateMarkers();
+                    }
+                } catch (error) {
+                    this.mapError = this.translations.failedToLoad || 'Failed to load map';
+                    if (window.console && console.error) {
+                        console.error('Pickup points error:', error);
+                    }
+                }
+            },
+
+            updateMarkers() {
+                // Opening the map and the context Magewire sends back on
+                // opening can both deliver the same pins: draw them once.
+                if (map && drawnPinsUrl === loadedPinsUrl) return;
+
+                this.resetSearchState();
+                if (!map) return;
+
+                map.eachLayer((layer) => {
                     if (layer instanceof window.L.Marker) {
-                        this.mapInstance.removeLayer(layer);
+                        map.removeLayer(layer);
                     }
                 });
 
-                this.addMapMarkers();
+                const added = this.addMarkers();
 
-                if (pins.length > 0) {
-                    const markers = [];
-                    this.mapInstance.eachLayer((layer) => {
-                        if (layer instanceof window.L.Marker) {
-                            markers.push(layer);
-                        }
-                    });
-
-                    if (markers.length > 0) {
-                        const group = new window.L.featureGroup(markers);
-                        this.mapInstance.fitBounds(group.getBounds().pad(0.2), {
+                if (this.selectedCounty && this.selectedCity) {
+                    if (added.length > 0) {
+                        const group = new window.L.featureGroup(added);
+                        map.fitBounds(group.getBounds().pad(0.2), {
                             maxZoom: 14,
                             padding: [20, 20]
                         });
                     }
+                } else if (!this.fitFewMarkers(added) && customerLocation) {
+                    // Many pins near the shipping region: show its centre, as a newly opened map does.
+                    map.setView([customerLocation.lat, customerLocation.lng], 15);
                 }
             },
 
@@ -194,8 +350,16 @@
                 this.mapError = null;
 
                 try {
-                    await this.loadMapResources();
-                    await this.initializeMap();
+                    const loaded = await Promise.all([this.loadMapResources(), this.loadPins()]);
+                    if (!this.showModal) return;
+
+                    if (map) {
+                        // Retry after a failed pins refresh: the map is still open.
+                        if (loaded[1]) this.updateMarkers();
+                        map.invalidateSize();
+                    } else {
+                        await this.initializeMap();
+                    }
                 } catch (error) {
                     this.mapError = error.message || this.translations.failedToLoad || 'Failed to load map';
                     if (window.console && console.error) {
@@ -208,20 +372,19 @@
 
             closeModal() {
                 this.showModal = false;
-                if (this.mapInstance) {
-                    this.mapInstance.remove();
-                    this.mapInstance = null;
-                    this.mapInitialized = false;
-                }
+                destroyMap();
+                this.mapInitialized = false;
                 this.resetSearchState();
             },
 
-            async loadMapResources() {
-                if (window.innoShipMapInitialized && window.innoShipMapObj) {
-                    return;
+            loadMapResources() {
+                if (!resourcesPromise) {
+                    resourcesPromise = this.loadExternalResources().catch((error) => {
+                        resourcesPromise = null;
+                        throw error;
+                    });
                 }
-                await this.loadExternalResources();
-                this.initializeInnoShipMapObject();
+                return resourcesPromise;
             },
 
             async loadExternalResources() {
@@ -253,132 +416,114 @@
                     }
 
                     element.onload = resolve;
-                    element.onerror = () => reject(new Error('Failed to load: ' + url));
+                    element.onerror = () => {
+                        element.remove();
+                        reject(new Error('Failed to load: ' + url));
+                    };
 
                     document.head.appendChild(element);
                 });
             },
 
-            initializeInnoShipMapObject() {
-                if (window.innoShipMapInitialized) return;
-
-                window.innoShipMapInitialized = true;
-                window.innoShipMapObj = {
-                    map: null,
-                    init: (elemId, component) => {
-                        if (!window.L) {
-                            throw new Error('Leaflet library not loaded');
-                        }
-                        const container = document.getElementById(elemId);
-                        if (!container) {
-                            throw new Error('Map container not found');
-                        }
-
-                        let mapPosition = [44.4268, 26.1025];
-                        let zoomLevel = 8;
-
-                        const data = component.innoShipData;
-
-                        if (component.selectedCounty && component.selectedCity && data.pins && data.pins.length > 0) {
-                            mapPosition = [data.pins[0].latitude, data.pins[0].longitude];
-                            zoomLevel = 13;
-                        } else if (data.customerLocation) {
-                            mapPosition = [data.customerLocation.lat, data.customerLocation.lng];
-                            zoomLevel = 15;
-                        } else if (data.pins && data.pins.length > 0) {
-                            mapPosition = [data.pins[0].latitude, data.pins[0].longitude];
-                            zoomLevel = 13;
-                        }
-
-                        const map = window.L.map(container).setView(mapPosition, zoomLevel);
-
-                        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                            minZoom: 5,
-                            maxZoom: 18,
-                            attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>'
-                        }).addTo(map);
-
-                        component.mapInstance = map;
-                        component.addMapMarkers();
-                        return map;
-                    }
-                };
-            },
-
             async initializeMap() {
                 await this.$nextTick();
-                const containerId = this.getMapContainerId();
-                const container = document.getElementById(containerId);
-                if (!container) return;
+                const container = document.getElementById(this.getMapContainerId());
+                if (!container || map) return;
 
-                if (container._leaflet_id && this.mapInstance) {
-                    this.addMapMarkers();
-                    return;
+                if (!window.L) {
+                    throw new Error('Failed to initialize map: Leaflet library not loaded');
                 }
-
-                try {
-                    this.mapInstance = window.innoShipMapObj.init(containerId, this);
-
-                    this.mapInstance.on('popupopen', (e) => {
-                        const popupContainer = e.popup._container;
-                        const selectBtn = popupContainer.querySelector('.innoship-select-pudo-btn');
-                        if (selectBtn) {
-                            selectBtn.addEventListener('click', () => {
-                                this.selectPudo(selectBtn.getAttribute('data-pudo-id'));
-                            });
-                        }
-                        const img = popupContainer.querySelector('.pudo-img');
-                        if (img) {
-                            img.addEventListener('error', () => {
-                                img.classList.add('hidden');
-                            });
-                        }
-                    });
-
-                    this.mapInitialized = true;
-                } catch (error) {
-                    throw new Error('Failed to initialize map: ' + error.message);
-                }
-            },
-
-            addMapMarkers() {
-                if (!this.mapInstance || !this.innoShipData.pins) return;
-
-                if (window.L && Object.keys(this.leafletIcons).length === 0) {
+                if (Object.keys(leafletIcons).length === 0) {
                     this.initLeafletIcons();
                 }
 
-                // Reset the marker index before rebuilding so focusResult() always
-                // has a fresh reference to the current set of Leaflet Marker objects.
-                this.markers = {};
+                let mapPosition = [44.4268, 26.1025];
+                let zoomLevel = 8;
 
-                const markers = [];
-                this.innoShipData.pins.forEach((pin) => {
+                if (this.selectedCounty && this.selectedCity && pins.length > 0) {
+                    mapPosition = [pins[0].latitude, pins[0].longitude];
+                    zoomLevel = 13;
+                } else if (customerLocation) {
+                    mapPosition = [customerLocation.lat, customerLocation.lng];
+                    zoomLevel = 15;
+                } else if (pins.length > 0) {
+                    mapPosition = [pins[0].latitude, pins[0].longitude];
+                    zoomLevel = 13;
+                }
+
+                map = window.L.map(container).setView(mapPosition, zoomLevel);
+
+                window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    minZoom: 5,
+                    maxZoom: 18,
+                    attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
+
+                this.fitFewMarkers(this.addMarkers());
+
+                map.on('popupopen', (e) => {
+                    const popupContainer = e.popup._container;
+                    const selectBtn = popupContainer.querySelector('.innoship-select-pudo-btn');
+                    if (selectBtn) {
+                        selectBtn.addEventListener('click', () => {
+                            this.selectPudo(selectBtn.getAttribute('data-pudo-id'));
+                        });
+                    }
+                    const img = popupContainer.querySelector('.pudo-img');
+                    if (img) {
+                        img.addEventListener('error', () => {
+                            img.classList.add('hidden');
+                        });
+                    }
+                });
+
+                this.mapInitialized = true;
+            },
+
+            /**
+             * Fits the view to the markers when there are few enough to show at
+             * a useful zoom. Returns false when it left the view alone.
+             */
+            fitFewMarkers(added) {
+                if (
+                    added.length > 0 &&
+                    added.length < 100 &&
+                    (customerLocation || (this.selectedCounty && this.selectedCity))
+                ) {
+                    const group = new window.L.featureGroup(added);
+                    map.fitBounds(group.getBounds().pad(0.2), {
+                        maxZoom: 16,
+                        padding: [20, 20]
+                    });
+                    return true;
+                }
+                return false;
+            },
+
+            addMarkers() {
+                // Rebuild the marker index so focusResult() always has a fresh
+                // reference to the current set of Leaflet Marker objects.
+                markers = {};
+                if (!map) return [];
+
+                const added = [];
+                pins.forEach((pin) => {
                     const courierId = pin.courier_id || 0;
-                    const icon = this.leafletIcons[courierId] || this.leafletIcons[0];
+                    const icon = leafletIcons[courierId] || leafletIcons[0];
                     const markerOptions = icon ? { icon: icon } : {};
                     const marker = window.L.marker([pin.latitude, pin.longitude], markerOptions)
-                        .addTo(this.mapInstance);
+                        .addTo(map);
 
                     marker.bindPopup(this.createPopupContent(pin));
 
                     // Index by pudo_id (cast to string for consistent key lookup).
-                    this.markers[String(pin.pudo_id)] = marker;
+                    markers[String(pin.pudo_id)] = marker;
 
-                    markers.push(marker);
+                    added.push(marker);
                 });
+                drawnPinsUrl = loadedPinsUrl;
 
-                if (
-                    markers.length > 0 &&
-                    markers.length < 100 &&
-                    (this.innoShipData.customerLocation || (this.selectedCounty && this.selectedCity))
-                ) {
-                    const group = new window.L.featureGroup(markers);
-                    this.mapInstance.fitBounds(group.getBounds().pad(0.2), {
-                        maxZoom: 16,
-                        padding: [20, 20]
-                    });
-                }
+                return added;
             },
 
             createPopupContent(pin) {
@@ -514,7 +659,7 @@
                     return;
                 }
 
-                const matches = (this.innoShipData.pins || []).filter((p) =>
+                const matches = pins.filter((p) =>
                     (p.name        || '').toLowerCase().includes(q) ||
                     (p.address     || '').toLowerCase().includes(q) ||
                     (p.city        || '').toLowerCase().includes(q) ||
@@ -545,11 +690,11 @@
             focusResult(event) {
                 const el = event && (event.currentTarget || event.target);
                 const id = el ? String(el.dataset.pudoId || '') : '';
-                const marker = id ? this.markers[id] : null;
+                const marker = id ? markers[id] : null;
 
-                if (!marker || !this.mapInstance) return;
+                if (!marker || !map) return;
 
-                this.mapInstance.setView(marker.getLatLng(), 17);
+                map.setView(marker.getLatLng(), 17);
                 marker.openPopup();
 
                 // Clear the dropdown — customer now sees the pin on the map.
@@ -559,11 +704,10 @@
             },
 
             /**
-             * Shared helper: clear all search state + the marker index.
+             * Shared helper: clear all search state.
              * Called on county/city change, modal close, and pin-set updates.
              */
             resetSearchState() {
-                this.markers           = {};
                 this.searchQuery       = '';
                 this.searchResults     = [];
                 this.showSearchResults = false;

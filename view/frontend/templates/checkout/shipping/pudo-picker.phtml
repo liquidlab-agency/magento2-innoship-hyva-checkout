@@ -8,14 +8,10 @@ declare(strict_types=1);
 
 use Liquidlab\InnoShipHyva\Magewire\PudoPicker;
 use Magento\Framework\Escaper;
-use Hyva\Theme\Model\ViewModelRegistry;
-use Hyva\Theme\ViewModel\HyvaCsp;
 
 /** @var PudoPicker $magewire */
 /** @var \Magento\Framework\View\Element\Template $block */
 /** @var Escaper $escaper */
-/** @var ViewModelRegistry $viewModels */
-$hyvaCsp = $viewModels->require(HyvaCsp::class);
 
 $icons = [
     0 => $block->getViewFileUrl('InnoShip_InnoShip::images/pin-general.png'),
@@ -56,27 +52,28 @@ $translations = [
 $alpineComponentName = 'innoShipPudoPicker';
 $pudoPickerJs = $block->getViewFileUrl('Liquidlab_InnoShipHyva::js/pudo-picker.js');
 
+// The pickup points are not printed here: the component fetches them from
+// pointsUrl when the map opens (Controller\Pudo\Points).
 $pickerConfig = [
-    'initialShowModal' => $magewire->showModal,
-    'initialSelectedCounty' => (string)$magewire->selectedCounty,
-    'initialSelectedCity' => (string)$magewire->selectedCity,
-    'innoShipData' => $magewire->getInnoShipData(),
     'iconUrls' => $icons,
     'leafletAssets' => $leafletAssets,
     'translations' => $translations,
+    'pointsUrl' => $block->getUrl('innoshiphyva/pudo/points'),
 ];
+$pickerContext = $magewire->getPickerContext();
 ?>
 <div id="innoship-pudo-picker-wrapper">
-    <script>
-        window.innoShipPudoPickerConfig = <?= /* @noEscape */ json_encode($pickerConfig) ?>;
-    </script>
-    <?php $hyvaCsp->registerInlineScript() ?>
     <script src="<?= $escaper->escapeUrl($pudoPickerJs) ?>"></script>
     <section
         class="innoship-pudo-picker"
         x-data="<?= $escaper->escapeHtmlAttr($alpineComponentName) ?>"
-        @innoship-pudo-points-updated.window="onPudoPointsUpdated"
+        data-config="<?= $escaper->escapeHtmlAttr((string)json_encode($pickerConfig)) ?>"
+        data-show-modal="<?= $magewire->showModal ? '1' : '' ?>"
+        data-county="<?= $escaper->escapeHtmlAttr($pickerContext['selectedCounty']) ?>"
+        data-city="<?= $escaper->escapeHtmlAttr($pickerContext['selectedCity']) ?>"
+        data-region-id="<?= (int)$pickerContext['regionId'] ?>"
         @innoship-pudo-data-updated.window="onPudoDataUpdated"
+        @innoship-pudo-unavailable.window="onPudoUnavailable"
         @open-innoship-pudo-modal.window="openMapModal"
     >
         <!-- Inline Map Modal -->

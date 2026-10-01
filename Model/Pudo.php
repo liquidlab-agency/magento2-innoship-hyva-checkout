@@ -83,6 +83,11 @@ class Pudo extends AbstractModel implements PudoInterface
         return $value !== null ? (string)$value : null;
     }
 
+    public function isActive(): bool
+    {
+        return (int)$this->getData(self::IS_ACTIVE) === 1;
+    }
+
     public function getOpenHours(): array
     {
         return [

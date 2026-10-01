@@ -9,9 +9,10 @@ declare(strict_types=1);
 
 namespace Liquidlab\InnoShipHyva\Test\Unit\Magewire;
 
+use Liquidlab\InnoShipHyva\Api\Data\PudoInterface;
 use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
 use Liquidlab\InnoShipHyva\Magewire\PudoPicker;
-use Liquidlab\InnoShipHyva\Model\RegionCoordinatesProvider;
+use Liquidlab\InnoShipHyva\Model\PudoPointsProvider;
 use Liquidlab\InnoShipHyva\Model\RegionResolver;
 use Magento\Checkout\Model\Session as SessionCheckout;
 use Magento\Framework\DataObject;
@@ -56,7 +57,7 @@ class PudoPickerReconcileTest extends TestCase
             $this->sessionCheckout,
             $this->createMock(LoggerInterface::class),
             $this->pudoRepository,
-            $this->createMock(RegionCoordinatesProvider::class),
+            $this->createMock(PudoPointsProvider::class),
             $this->createMock(RegionResolver::class),
             $this->createMock(AddressExtensionFactory::class)
         );
@@ -97,6 +98,24 @@ class PudoPickerReconcileTest extends TestCase
             ->method('getByPudoId')
             ->with(679650)
             ->willThrowException(new NoSuchEntityException(__('gone')));
+
+        $this->invokeReconcile(['pudo_id' => self::PUDO_ID]);
+    }
+
+    public function testDoesNotReStampAnInactivePudo(): void
+    {
+        // Innoship deactivated the locker after it was picked. Leave the quote as
+        // it is: ValidatePudoOnQuoteSubmit then asks for another point.
+        $this->stubQuote(self::LOCKER_METHOD, null);
+        $pudo = $this->createMock(PudoInterface::class);
+        $pudo->method('isActive')->willReturn(false);
+        // The address write starts by reading the point's county and street.
+        $pudo->expects($this->never())->method('getCountyName');
+        $pudo->expects($this->never())->method('getAddressText');
+        $this->pudoRepository->expects($this->once())
+            ->method('getByPudoId')
+            ->with(679650)
+            ->willReturn($pudo);
 
         $this->invokeReconcile(['pudo_id' => self::PUDO_ID]);
     }

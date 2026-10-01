@@ -11,7 +11,7 @@ namespace Liquidlab\InnoShipHyva\Magewire;
 use Liquidlab\InnoShipHyva\Api\Data\PudoInterface;
 use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
 use Liquidlab\InnoShipHyva\Model\Config\PaymentRestrictionConfig;
-use Liquidlab\InnoShipHyva\Model\RegionCoordinatesProvider;
+use Liquidlab\InnoShipHyva\Model\PudoPointsProvider;
 use Liquidlab\InnoShipHyva\Model\RegionResolver;
 use Magento\Checkout\Model\Session as SessionCheckout;
 use Magento\Framework\Exception\NoSuchEntityException;
@@ -23,7 +23,6 @@ use Psr\Log\LoggerInterface;
 class PudoPicker extends Component
 {
     private const INNOSHIP_PUDO_SESSION_KEY = 'innoship_selected_pudo_point';
-    private const SEARCH_RADIUS_KM = 50;
 
     public ?string $selectedCounty = '';
     public ?string $selectedCity = '';
@@ -34,7 +33,7 @@ class PudoPicker extends Component
         private readonly SessionCheckout $sessionCheckout,
         private readonly LoggerInterface $logger,
         private readonly PudoRepositoryInterface $pudoRepository,
-        private readonly RegionCoordinatesProvider $regionCoordinatesProvider,
+        private readonly PudoPointsProvider $pudoPointsProvider,
         private readonly RegionResolver $regionResolver,
         private readonly AddressExtensionFactory $addressExtensionFactory
     ) {
@@ -109,6 +108,13 @@ class PudoPicker extends Component
                 return;
             }
 
+            if (!$pudo->isActive()) {
+                $this->logger->warning(
+                    'InnoShipHyva: session references a PUDO that Innoship has deactivated: ' . $pudoData['pudo_id']
+                );
+                return;
+            }
+
             $this->updateShippingAddressWithPudo($pudo);
         } catch (\Exception $e) {
             $this->logger->warning(
@@ -121,7 +127,22 @@ class PudoPicker extends Component
     {
         try {
             $pudo = $this->pudoRepository->getByPudoId((int)$pudoId);
+        } catch (NoSuchEntityException $e) {
+            $pudo = null;
+        }
 
+        // The map caches its points, so it can still offer a locker that
+        // Innoship has deactivated or removed since.
+        if ($pudo === null || !$pudo->isActive()) {
+            $this->logger->warning('InnoShipHyva: pickup point ' . $pudoId . ' is no longer available');
+            $this->dispatchErrorMessage(
+                (string)__('This pickup point is no longer available. Please select another one.')
+            );
+            $this->dispatchBrowserEvent('innoship-pudo-unavailable', ['pudoId' => $pudoId]);
+            return;
+        }
+
+        try {
             $this->sessionCheckout->setData(
                 self::INNOSHIP_PUDO_SESSION_KEY,
                 $this->buildSessionPudoData($pudo)
@@ -162,7 +183,7 @@ class PudoPicker extends Component
             'longitude' => (string)$pudo->getLongitude(),
             'type' => (string)$pudo->getFixedLocationTypeId(),
             'payment_info' => $this->formatPaymentInfo(
-                $this->convertPaymentInfoToJson($pudo->getSupportedPaymentType())
+                $this->pudoPointsProvider->getPaymentTypesJson($pudo->getSupportedPaymentType())
             ),
             'selected_county' => $this->selectedCounty,
             'selected_city' => $this->selectedCity,
@@ -170,40 +191,24 @@ class PudoPicker extends Component
     }
 
     /**
-     * Build the data payload consumed by the Alpine component.
+     * What the Alpine component needs to fetch its pins from the points
+     * endpoint: the chosen county and city, or else the quote's shipping region.
      *
-     * Computed on demand instead of being kept in the Magewire public state,
-     * so we don't ship counties/cities/pins back and forth on every roundtrip.
+     * The pins themselves stay out of this component. Printed into its template
+     * they made the checkout HTML, and every Magewire update of the component,
+     * about 2 MB larger.
+     *
+     * @return array{selectedCounty: string, selectedCity: string, regionId: int}
      */
-    public function getInnoShipData(): array
+    public function getPickerContext(): array
     {
-        try {
-            $this->resolveSearchState();
-            $customerLocation = $this->getCustomerLocation();
-            $pins = [];
+        $this->resolveSearchState();
 
-            if (!empty($this->selectedCounty) && !empty($this->selectedCity)) {
-                $pins = $this->fetchPudoPoints($this->selectedCounty, $this->selectedCity);
-            } elseif ($customerLocation) {
-                $pins = $this->filterPudoPointsByDistance(
-                    $this->fetchPudoPoints(),
-                    $customerLocation,
-                    self::SEARCH_RADIUS_KM
-                );
-            }
-
-            return [
-                'pins' => $pins,
-                'customerLocation' => $customerLocation,
-                'counties' => $this->getCounties(),
-                'cities' => $this->getCities(),
-                'selectedCounty' => $this->selectedCounty,
-                'selectedCity' => $this->selectedCity,
-            ];
-        } catch (\Exception $e) {
-            $this->logger->error('InnoShipHyva: Failed to get InnoShip data: ' . $e->getMessage());
-            return ['pins' => [], 'counties' => [], 'cities' => []];
-        }
+        return [
+            'selectedCounty' => (string)$this->selectedCounty,
+            'selectedCity' => (string)$this->selectedCity,
+            'regionId' => $this->getShippingRegionId(),
+        ];
     }
 
     public function getCounties(): array
@@ -234,7 +239,12 @@ class PudoPicker extends Component
         }
     }
 
-    public function updatedSelectedCounty(): void
+    /**
+     * Magewire assigns what an updated* hook returns to the property, so each
+     * hook returns the value it was given; returning nothing reset the choice
+     * to null.
+     */
+    public function updatedSelectedCounty(): ?string
     {
         $this->selectedCity = '';
 
@@ -243,18 +253,36 @@ class PudoPicker extends Component
         $pudoData['selected_city'] = '';
         $this->sessionCheckout->setData(self::INNOSHIP_PUDO_SESSION_KEY, $pudoData);
 
-        $this->dispatchBrowserEvent('innoship-pudo-data-updated', ['data' => $this->getInnoShipData()]);
+        $this->dispatchBrowserEvent('innoship-pudo-data-updated', ['data' => $this->getPickerContext()]);
+
+        return $this->selectedCounty;
     }
 
-    public function updatedSelectedCity(): void
+    public function updatedSelectedCity(): ?string
     {
         $pudoData = $this->sessionCheckout->getData(self::INNOSHIP_PUDO_SESSION_KEY) ?: [];
         $pudoData['selected_city'] = $this->selectedCity;
         $this->sessionCheckout->setData(self::INNOSHIP_PUDO_SESSION_KEY, $pudoData);
 
-        $data = $this->getInnoShipData();
-        $this->dispatchBrowserEvent('innoship-pudo-points-updated', ['pins' => $data['pins']]);
-        $this->dispatchBrowserEvent('innoship-pudo-data-updated', ['data' => $data]);
+        $this->dispatchBrowserEvent('innoship-pudo-data-updated', ['data' => $this->getPickerContext()]);
+
+        return $this->selectedCity;
+    }
+
+    /**
+     * Opens or closes the map. The Alpine component calls this instead of
+     * $wire.set('showModal'), because Magewire's $set assigns the property
+     * without calling updated* hooks. Opening sends the current context, so
+     * the map follows a shipping region the customer entered after the page
+     * loaded.
+     */
+    public function setModalOpen(bool $open): void
+    {
+        $this->showModal = $open;
+
+        if ($open) {
+            $this->dispatchBrowserEvent('innoship-pudo-data-updated', ['data' => $this->getPickerContext()]);
+        }
     }
 
     private function resolveSearchState(): void
@@ -273,130 +301,21 @@ class PudoPicker extends Component
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * The quote's Romanian shipping region, which the map centres on until the
+     * customer picks a county and city; 0 when there is none.
      */
-    private function fetchPudoPoints(?string $county = null, ?string $city = null): array
-    {
-        $points = $this->pudoRepository->getActivePudoPoints($county, $city);
-
-        return array_map(fn(PudoInterface $pudo) => $this->serializePudo($pudo), $points);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function serializePudo(PudoInterface $pudo): array
-    {
-        $hours = $pudo->getOpenHours();
-
-        return [
-            'pudo_id' => $pudo->getPudoId(),
-            'courier_id' => $pudo->getCourierId(),
-            'name' => $pudo->getName(),
-            'address' => $pudo->getAddressText(),
-            'city' => $pudo->getLocalityName(),
-            'postal_code' => (string)$pudo->getPostalCode(),
-            'latitude' => $pudo->getLatitude(),
-            'longitude' => $pudo->getLongitude(),
-            'type' => $pudo->getFixedLocationTypeId(),
-            'accepted_payment_type' => $this->convertPaymentInfoToJson($pudo->getSupportedPaymentType()),
-            'phone_number' => $pudo->getPhone() ?? '',
-            'mo_start' => $hours['mo']['start'],
-            'mo_end' => $hours['mo']['end'],
-            'tu_start' => $hours['tu']['start'],
-            'tu_end' => $hours['tu']['end'],
-            'we_start' => $hours['we']['start'],
-            'we_end' => $hours['we']['end'],
-            'th_start' => $hours['th']['start'],
-            'th_end' => $hours['th']['end'],
-            'fr_start' => $hours['fr']['start'],
-            'fr_end' => $hours['fr']['end'],
-            'sa_start' => $hours['sa']['start'],
-            'sa_end' => $hours['sa']['end'],
-            'su_start' => $hours['su']['start'],
-            'su_end' => $hours['su']['end'],
-        ];
-    }
-
-    private function convertPaymentInfoToJson(?string $paymentType): string
-    {
-        if (empty($paymentType)) {
-            return json_encode([]);
-        }
-
-        $types = array_map('trim', explode(',', $paymentType));
-        $result = [];
-        foreach ($types as $type) {
-            if ($type === 'Cash') $result['Cash'] = true;
-            if ($type === 'Card') $result['Card'] = true;
-            if ($type === 'Online') $result['Online'] = true;
-        }
-
-        return (string)json_encode($result);
-    }
-
-    private function getCustomerLocation(): ?array
+    private function getShippingRegionId(): int
     {
         try {
-            $quote = $this->sessionCheckout->getQuote();
-            $shippingAddress = $quote->getShippingAddress();
-
+            $shippingAddress = $this->sessionCheckout->getQuote()->getShippingAddress();
             if (!$shippingAddress || $shippingAddress->getCountryId() !== 'RO') {
-                return null;
+                return 0;
             }
 
-            $regionId = (int)$shippingAddress->getRegionId();
-            if ($regionId <= 0) {
-                return null;
-            }
-
-            $coordinates = $this->regionCoordinatesProvider->getByRegionId($regionId);
-            if (!$coordinates) {
-                return null;
-            }
-
-            return [
-                'lat' => $coordinates['lat'],
-                'lng' => $coordinates['lng'],
-                'region' => $shippingAddress->getRegion(),
-                'region_id' => $regionId,
-            ];
+            return max(0, (int)$shippingAddress->getRegionId());
         } catch (\Exception $e) {
-            return null;
+            return 0;
         }
-    }
-
-    private function filterPudoPointsByDistance(array $pudoPoints, array $customerLocation, float $radiusKm): array
-    {
-        $customerLat = (float)$customerLocation['lat'];
-        $customerLng = (float)$customerLocation['lng'];
-        $filteredPoints = [];
-
-        foreach ($pudoPoints as $point) {
-            $distance = $this->calculateDistance(
-                $customerLat,
-                $customerLng,
-                (float)$point['latitude'],
-                (float)$point['longitude']
-            );
-            if ($distance <= $radiusKm) {
-                $point['distance_km'] = round($distance, 2);
-                $filteredPoints[] = $point;
-            }
-        }
-
-        usort($filteredPoints, fn($a, $b) => $a['distance_km'] <=> $b['distance_km']);
-        return $filteredPoints;
-    }
-
-    private function calculateDistance(float $lat1, float $lng1, float $lat2, float $lng2): float
-    {
-        $earthRadius = 6371;
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLng = deg2rad($lng2 - $lng1);
-        $a = sin($dLat / 2) * sin($dLat / 2)
-            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) * sin($dLng / 2);
-        return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
     /**
