@@ -9,10 +9,12 @@ declare(strict_types=1);
 
 namespace Liquidlab\InnoShipHyva\Observer;
 
+use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
 use Liquidlab\InnoShipHyva\Model\Config\PaymentRestrictionConfig;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Quote\Model\Quote;
 
 /**
@@ -27,13 +29,16 @@ use Magento\Quote\Model\Quote;
  * the shipping_method label, so a stamped pudo on a courier-labelled order still
  * ships to the locker.
  *
- * Two invariants are enforced, closing every bypass of the client-side Magewire
+ * Three invariants are enforced, closing every bypass of the client-side Magewire
  * gate and the payment-list filter (stale $this->pudoId, spoofed
  * cascading-step-data, address edited after picking, or a payment/shipping reload
  * that drifts the payment list back to cash-on-delivery while a locker is still
  * stamped):
  *   1. A locker delivery must have a pickup point (innoship_pudo_id).
- *   2. A locker delivery must be paid with a method the merchant allows for the
+ *   2. The pickup point must still exist and be active. The map caches its points
+ *      and a quote keeps the point it was given, so either can name a locker that
+ *      Innoship has deactivated or removed since.
+ *   3. A locker delivery must be paid with a method the merchant allows for the
  *      locker carrier (lockers are prepaid-only — cash-on-delivery to a card-only
  *      EasyBox is rejected).
  *
@@ -43,7 +48,8 @@ use Magento\Quote\Model\Quote;
 class ValidatePudoOnQuoteSubmit implements ObserverInterface
 {
     public function __construct(
-        private readonly PaymentRestrictionConfig $paymentRestrictionConfig
+        private readonly PaymentRestrictionConfig $paymentRestrictionConfig,
+        private readonly PudoRepositoryInterface $pudoRepository
     ) {
     }
 
@@ -72,7 +78,14 @@ class ValidatePudoOnQuoteSubmit implements ObserverInterface
             );
         }
 
-        // Invariant 2: a locker delivery must use an allowed (prepaid) payment method.
+        // Invariant 2: the pickup point must still exist and be active.
+        if (!$this->isAvailable($pudoId)) {
+            throw new LocalizedException(
+                __('This pickup point is no longer available. Please select another one.')
+            );
+        }
+
+        // Invariant 3: a locker delivery must use an allowed (prepaid) payment method.
         $allowed = $this->paymentRestrictionConfig->getAllowedPaymentMethods(
             PaymentRestrictionConfig::LOCKER_CARRIER_CODE,
             (int)$quote->getStoreId()
@@ -87,6 +100,15 @@ class ValidatePudoOnQuoteSubmit implements ObserverInterface
             throw new LocalizedException(
                 __('Deliveries to a pickup point (locker) must be paid online. Please choose an online payment method.')
             );
+        }
+    }
+
+    private function isAvailable(int $pudoId): bool
+    {
+        try {
+            return $this->pudoRepository->getByPudoId($pudoId)->isActive();
+        } catch (NoSuchEntityException $e) {
+            return false;
         }
     }
 }

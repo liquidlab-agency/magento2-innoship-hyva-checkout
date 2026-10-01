@@ -194,6 +194,21 @@
                 }
             },
 
+            /**
+             * Magewire turned down a point that Innoship has deactivated or
+             * removed since the pins were cached: drop it from the map.
+             */
+            onPudoUnavailable(event) {
+                const pudoId = String((event.detail && event.detail.pudoId) || '');
+                if (!pudoId) return;
+
+                pins = pins.filter((pin) => String(pin.pudo_id) !== pudoId);
+                if (map && markers[pudoId]) {
+                    map.removeLayer(markers[pudoId]);
+                }
+                delete markers[pudoId];
+            },
+
             applyContext(context) {
                 const regionId = parseInt(context.regionId, 10);
                 this.selectedCounty = context.selectedCounty || '';

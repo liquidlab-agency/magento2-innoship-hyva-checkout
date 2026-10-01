@@ -49,6 +49,8 @@ interface PudoInterface
 
     public function getSupportedPaymentType(): ?string;
 
+    public function isActive(): bool;
+
     public function getOpenHours(): array;
 
     public function getData($key = '', $index = null);

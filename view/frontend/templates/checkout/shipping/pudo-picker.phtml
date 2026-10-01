@@ -73,6 +73,7 @@ $pickerContext = $magewire->getPickerContext();
         data-city="<?= $escaper->escapeHtmlAttr($pickerContext['selectedCity']) ?>"
         data-region-id="<?= (int)$pickerContext['regionId'] ?>"
         @innoship-pudo-data-updated.window="onPudoDataUpdated"
+        @innoship-pudo-unavailable.window="onPudoUnavailable"
         @open-innoship-pudo-modal.window="openMapModal"
     >
         <!-- Inline Map Modal -->

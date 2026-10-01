@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace Liquidlab\InnoShipHyva\Test\Unit\Magewire;
 
+use Liquidlab\InnoShipHyva\Api\Data\PudoInterface;
 use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
 use Liquidlab\InnoShipHyva\Magewire\PudoPicker;
 use Liquidlab\InnoShipHyva\Model\PudoPointsProvider;
@@ -97,6 +98,24 @@ class PudoPickerReconcileTest extends TestCase
             ->method('getByPudoId')
             ->with(679650)
             ->willThrowException(new NoSuchEntityException(__('gone')));
+
+        $this->invokeReconcile(['pudo_id' => self::PUDO_ID]);
+    }
+
+    public function testDoesNotReStampAnInactivePudo(): void
+    {
+        // Innoship deactivated the locker after it was picked. Leave the quote as
+        // it is: ValidatePudoOnQuoteSubmit then asks for another point.
+        $this->stubQuote(self::LOCKER_METHOD, null);
+        $pudo = $this->createMock(PudoInterface::class);
+        $pudo->method('isActive')->willReturn(false);
+        // The address write starts by reading the point's county and street.
+        $pudo->expects($this->never())->method('getCountyName');
+        $pudo->expects($this->never())->method('getAddressText');
+        $this->pudoRepository->expects($this->once())
+            ->method('getByPudoId')
+            ->with(679650)
+            ->willReturn($pudo);
 
         $this->invokeReconcile(['pudo_id' => self::PUDO_ID]);
     }

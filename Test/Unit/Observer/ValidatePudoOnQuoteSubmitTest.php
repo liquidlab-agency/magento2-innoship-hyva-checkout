@@ -9,19 +9,23 @@ declare(strict_types=1);
 
 namespace Liquidlab\InnoShipHyva\Test\Unit\Observer;
 
+use Liquidlab\InnoShipHyva\Api\Data\PudoInterface;
+use Liquidlab\InnoShipHyva\Api\PudoRepositoryInterface;
 use Liquidlab\InnoShipHyva\Model\Config\PaymentRestrictionConfig;
 use Liquidlab\InnoShipHyva\Observer\ValidatePudoOnQuoteSubmit;
 use Magento\Framework\DataObject;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\Exception\NoSuchEntityException;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Hard server-side backstop coverage. Two invariants, both enforced on
+ * Hard server-side backstop coverage. Three invariants, all enforced on
  * sales_model_service_quote_submit_before:
  *   1. a locker delivery must have a pickup point (innoship_pudo_id);
- *   2. a locker delivery must be paid with an allowed (prepaid) method.
+ *   2. the pickup point must still exist and be active;
+ *   3. a locker delivery must be paid with an allowed (prepaid) method.
  *
  * "Locker delivery" = shipping method is the locker carrier OR a pudo is stamped.
  * The pudo is decisive because InnoShip's AWB routes by innoship_pudo_id — a
@@ -40,6 +44,9 @@ class ValidatePudoOnQuoteSubmitTest extends TestCase
     private PaymentRestrictionConfig&MockObject $paymentRestrictionConfig;
     private ValidatePudoOnQuoteSubmit $observer;
 
+    /** Whether the stamped pickup point is active; null when it no longer exists. */
+    private ?bool $pudoActive = true;
+
     protected function setUp(): void
     {
         $this->paymentRestrictionConfig = $this->createMock(PaymentRestrictionConfig::class);
@@ -48,7 +55,18 @@ class ValidatePudoOnQuoteSubmitTest extends TestCase
             ->method('getAllowedPaymentMethods')
             ->willReturn(['eppay']);
 
-        $this->observer = new ValidatePudoOnQuoteSubmit($this->paymentRestrictionConfig);
+        $pudoRepository = $this->createMock(PudoRepositoryInterface::class);
+        $pudoRepository->method('getByPudoId')->willReturnCallback(function (int $pudoId): PudoInterface {
+            if ($this->pudoActive === null) {
+                throw new NoSuchEntityException(__('PUDO with ID %1 not found.', $pudoId));
+            }
+            $pudo = $this->createMock(PudoInterface::class);
+            $pudo->method('isActive')->willReturn($this->pudoActive);
+
+            return $pudo;
+        });
+
+        $this->observer = new ValidatePudoOnQuoteSubmit($this->paymentRestrictionConfig, $pudoRepository);
     }
 
     public function testThrowsWhenLockerMethodHasNoPudo(): void
@@ -107,6 +125,43 @@ class ValidatePudoOnQuoteSubmitTest extends TestCase
         $this->expectNotToPerformAssertions();
 
         $event = $this->makeEvent($this->makeQuote('flatrate_flatrate', null, 'cashondelivery'));
+        $this->observer->execute($event);
+    }
+
+    public function testThrowsWhenThePudoNoLongerExists(): void
+    {
+        $this->pudoActive = null;
+        $event = $this->makeEvent($this->makeQuote(self::LOCKER_METHOD, 679650, 'eppay'));
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('This pickup point is no longer available');
+
+        $this->observer->execute($event);
+    }
+
+    public function testThrowsWhenThePudoIsInactive(): void
+    {
+        $this->pudoActive = false;
+        $event = $this->makeEvent($this->makeQuote(self::LOCKER_METHOD, 679650, 'eppay'));
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('This pickup point is no longer available');
+
+        $this->observer->execute($event);
+    }
+
+    /**
+     * Paying online would not help with a locker that is gone, so availability is
+     * reported first.
+     */
+    public function testReportsAnUnavailablePudoBeforeThePaymentRule(): void
+    {
+        $this->pudoActive = false;
+        $event = $this->makeEvent($this->makeQuote(self::LOCKER_METHOD, 679650, 'cashondelivery'));
+
+        $this->expectException(LocalizedException::class);
+        $this->expectExceptionMessage('This pickup point is no longer available');
+
         $this->observer->execute($event);
     }
 

@@ -108,6 +108,13 @@ class PudoPicker extends Component
                 return;
             }
 
+            if (!$pudo->isActive()) {
+                $this->logger->warning(
+                    'InnoShipHyva: session references a PUDO that Innoship has deactivated: ' . $pudoData['pudo_id']
+                );
+                return;
+            }
+
             $this->updateShippingAddressWithPudo($pudo);
         } catch (\Exception $e) {
             $this->logger->warning(
@@ -120,7 +127,22 @@ class PudoPicker extends Component
     {
         try {
             $pudo = $this->pudoRepository->getByPudoId((int)$pudoId);
+        } catch (NoSuchEntityException $e) {
+            $pudo = null;
+        }
 
+        // The map caches its points, so it can still offer a locker that
+        // Innoship has deactivated or removed since.
+        if ($pudo === null || !$pudo->isActive()) {
+            $this->logger->warning('InnoShipHyva: pickup point ' . $pudoId . ' is no longer available');
+            $this->dispatchErrorMessage(
+                (string)__('This pickup point is no longer available. Please select another one.')
+            );
+            $this->dispatchBrowserEvent('innoship-pudo-unavailable', ['pudoId' => $pudoId]);
+            return;
+        }
+
+        try {
             $this->sessionCheckout->setData(
                 self::INNOSHIP_PUDO_SESSION_KEY,
                 $this->buildSessionPudoData($pudo)
