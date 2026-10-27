@@ -81,11 +81,24 @@
         address form's listener map, pointing at Magewire's built-in
         `$refresh`, which re-runs boot() and re-imports `$address` from
         the now-updated quote — so the customer immediately sees the
-        PUDO's company/street/city/postcode in the form inputs.
+        PUDO's company/street/city/postcode in the form inputs. The same
+        plugin stops Hyvä's dehydrate() autosave on that roundtrip, which
+        would write the browser's stale (saved) address back over the locker.
     -->
     <type name="Hyva\Checkout\Magewire\Checkout\AddressView\ShippingDetails\AddressForm">
         <plugin name="liquidlab_innoshiphyva_refresh_address_form_on_pudo_selected"
                 type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\RefreshAddressFormOnPudoSelected"
+                sortOrder="10"/>
+    </type>
+
+    <!--
+        Logged-in customers with saved addresses see Hyvä's saved-address list,
+        not the form. Re-render it on the same events so the saved card is no
+        longer shown as selected once the quote ships to a locker.
+    -->
+    <type name="Hyva\Checkout\Magewire\Checkout\AddressView\ShippingDetails\AddressList">
+        <plugin name="liquidlab_innoshiphyva_refresh_address_list_on_pudo_selected"
+                type="Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\RefreshAddressListOnPudoSelected"
                 sortOrder="10"/>
     </type>
 

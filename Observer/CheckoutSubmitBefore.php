@@ -174,6 +174,9 @@ class CheckoutSubmitBefore implements ObserverInterface
         // keys (see PudoPicker::buildSessionPudoData()) - do not re-derive them by
         // parsing the address string, InnoShip's addressText has no separator that
         // reliably distinguishes the locality from the street.
+        // A locker is never a saved customer address (see PudoPicker::updateShippingAddressWithPudo()).
+        $shippingAddress->setCustomerAddressId(null);
+        $shippingAddress->setSaveInAddressBook(0);
         $shippingAddress->setCompany($pudoData['name'] ?? __('PUDO Point')->render());
 
         if (!empty($pudoData['address'])) {
