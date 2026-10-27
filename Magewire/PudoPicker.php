@@ -347,6 +347,12 @@ class PudoPicker extends Component
                 $countryCode
             );
 
+            // The locker is not one of the customer's saved addresses. A kept
+            // customer_address_id leaves that saved card selected in Hyvä's
+            // address list, which re-imports it over the locker; save_in_address_book
+            // would copy the locker into the customer's address book on order.
+            $shippingAddress->setCustomerAddressId(null);
+            $shippingAddress->setSaveInAddressBook(0);
             $shippingAddress->setCompany($pudo->getName());
             $shippingAddress->setStreet([(string)$pudo->getAddressText()]);
             $shippingAddress->setCity($pudo->getLocalityName());

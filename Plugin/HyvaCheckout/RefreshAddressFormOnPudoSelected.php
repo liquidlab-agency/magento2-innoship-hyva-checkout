@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace Liquidlab\InnoShipHyva\Plugin\HyvaCheckout;
 
 use Hyva\Checkout\Magewire\Checkout\AddressView\ShippingDetails\AddressForm;
+use Magewirephp\Magewire\Model\Action\FireEvent;
 
 /**
  * Makes Hyvä's shipping-address form re-hydrate from the quote on two events:
@@ -27,17 +28,60 @@ use Hyva\Checkout\Magewire\Checkout\AddressView\ShippingDetails\AddressForm;
  * `$listeners`), so without this plugin the inputs sit stale until a page reload.
  * By mapping our events to Magewire's built-in `$refresh` handler the component
  * re-imports `$address` from the now-updated quote on each event.
+ *
+ * The same roundtrip must not autosave. Hyvä's `dehydrate()` saves the form
+ * whenever the browser's `address` differs from the form, and on these events
+ * the browser still holds the address from before the event (for a logged-in
+ * customer, the saved address). Saving it wrote that address back over the
+ * locker, so the order went out to the customer's saved address.
  */
 class RefreshAddressFormOnPudoSelected
 {
+    public const PUDO_EVENTS = ['innoship-pudo-selected', 'innoship-pudo-cleared'];
+
     /**
      * @param string[] $listeners
      * @return string[]
      */
     public function afterGetListeners(AddressForm $subject, array $listeners): array
     {
-        $listeners['innoship-pudo-selected'] = '$refresh';
-        $listeners['innoship-pudo-cleared']  = '$refresh';
+        foreach (self::PUDO_EVENTS as $event) {
+            $listeners[$event] = '$refresh';
+        }
         return $listeners;
+    }
+
+    /**
+     * On a PUDO event roundtrip, reload the form from the quote instead of
+     * letting Hyvä autosave the browser's stale address over it.
+     */
+    public function aroundDehydrate(AddressForm $subject, callable $proceed): void
+    {
+        if (!self::isPudoEventRequest($subject->getRequest('updates'))) {
+            $proceed();
+            return;
+        }
+
+        $subject->boot();
+    }
+
+    /**
+     * @param mixed $updates the Magewire request updates
+     */
+    public static function isPudoEventRequest($updates): bool
+    {
+        if (!is_array($updates)) {
+            return false;
+        }
+
+        foreach ($updates as $update) {
+            if (($update['type'] ?? null) === FireEvent::ACTION
+                && in_array($update['payload']['event'] ?? null, self::PUDO_EVENTS, true)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

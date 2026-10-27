@@ -45,12 +45,14 @@ class PudoPickerReconcileTest extends TestCase
 
     private SessionCheckout&MockObject $sessionCheckout;
     private PudoRepositoryInterface&MockObject $pudoRepository;
+    private RegionResolver&MockObject $regionResolver;
     private PudoPicker $picker;
 
     protected function setUp(): void
     {
         $this->sessionCheckout = $this->createMock(SessionCheckout::class);
         $this->pudoRepository = $this->createMock(PudoRepositoryInterface::class);
+        $this->regionResolver = $this->createMock(RegionResolver::class);
 
         $this->picker = new PudoPicker(
             $this->createMock(CartRepositoryInterface::class),
@@ -58,7 +60,7 @@ class PudoPickerReconcileTest extends TestCase
             $this->createMock(LoggerInterface::class),
             $this->pudoRepository,
             $this->createMock(PudoPointsProvider::class),
-            $this->createMock(RegionResolver::class),
+            $this->regionResolver,
             $this->createMock(AddressExtensionFactory::class)
         );
     }
@@ -130,7 +132,44 @@ class PudoPickerReconcileTest extends TestCase
         $this->invokeReconcile(['pudo_id' => self::PUDO_ID]);
     }
 
-    private function stubQuote(string $shippingMethod, ?string $pudoId): void
+    public function testStampingALockerUnlinksTheSavedCustomerAddress(): void
+    {
+        // A logged-in customer had saved address 4187 selected. The locker must not
+        // stay linked to it: Hyvä's address list would keep that card selected and
+        // re-import it, and save_in_address_book would copy the locker into the
+        // customer's address book when the order is placed.
+        $address = $this->stubQuote(self::LOCKER_METHOD, null);
+        $address->addData([
+            'customer_address_id' => 4187,
+            'save_in_address_book' => 1,
+            'extension_attributes' => new DataObject(),
+        ]);
+        $this->regionResolver->method('resolveByName')
+            ->willReturn(['region' => 'Bucuresti', 'region_id' => 1]);
+
+        // getCountryCode() is a magic getter on the Pudo model, not on the interface.
+        $pudo = $this->getMockBuilder(PudoInterface::class)
+            ->onlyMethods(get_class_methods(PudoInterface::class))
+            ->addMethods(['getCountryCode'])
+            ->getMock();
+        $pudo->method('getCountryCode')->willReturn('RO');
+        $pudo->method('getName')->willReturn('easybox Barsanesti');
+        $pudo->method('getAddressText')->willReturn('Str. Barsanesti 2B');
+        $pudo->method('getLocalityName')->willReturn('Sector 6');
+        $pudo->method('getPostalCode')->willReturn('061308');
+        $pudo->method('getPudoId')->willReturn(149801);
+
+        $method = new ReflectionMethod(PudoPicker::class, 'updateShippingAddressWithPudo');
+        $method->setAccessible(true);
+        $method->invoke($this->picker, $pudo);
+
+        $this->assertNull($address->getCustomerAddressId());
+        $this->assertSame(0, $address->getSaveInAddressBook());
+        $this->assertSame(['Str. Barsanesti 2B'], $address->getStreet());
+        $this->assertSame('149801', $address->getInnoshipPudoId());
+    }
+
+    private function stubQuote(string $shippingMethod, ?string $pudoId): DataObject
     {
         $address = new DataObject([
             'shipping_method' => $shippingMethod,
@@ -139,6 +178,8 @@ class PudoPickerReconcileTest extends TestCase
         $quote = $this->createMock(Quote::class);
         $quote->method('getShippingAddress')->willReturn($address);
         $this->sessionCheckout->method('getQuote')->willReturn($quote);
+
+        return $address;
     }
 
     /**
