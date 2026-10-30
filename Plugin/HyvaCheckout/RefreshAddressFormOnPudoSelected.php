@@ -34,10 +34,22 @@ use Magewirephp\Magewire\Model\Action\FireEvent;
  * the browser still holds the address from before the event (for a logged-in
  * customer, the saved address). Saving it wrote that address back over the
  * locker, so the order went out to the customer's saved address.
+ *
+ * Instead of saving, the roundtrip sends back the address `boot()` loaded from
+ * the quote. It must not call `boot()` a second time: the form is shared for the
+ * request, so a second `init()` makes every form modifier register its listeners
+ * again, and each one logs a FormException ("A form modifier with name ... already
+ * exists").
  */
 class RefreshAddressFormOnPudoSelected
 {
     public const PUDO_EVENTS = ['innoship-pudo-selected', 'innoship-pudo-cleared'];
+
+    /**
+     * The address `boot()` loaded from the quote, before hydration replaced it
+     * with the browser's copy.
+     */
+    private ?array $bootedAddress = null;
 
     /**
      * @param string[] $listeners
@@ -52,8 +64,17 @@ class RefreshAddressFormOnPudoSelected
     }
 
     /**
-     * On a PUDO event roundtrip, reload the form from the quote instead of
-     * letting Hyvä autosave the browser's stale address over it.
+     * Magewire runs `boot()` before hydration, which overwrites `address` with
+     * the browser's copy unless the event is the request's only update.
+     */
+    public function afterBoot(AddressForm $subject, $result): void
+    {
+        $this->bootedAddress = $subject->address;
+    }
+
+    /**
+     * On a PUDO event roundtrip, send back the address loaded from the quote
+     * instead of letting Hyvä autosave the browser's stale address over it.
      */
     public function aroundDehydrate(AddressForm $subject, callable $proceed): void
     {
@@ -62,7 +83,9 @@ class RefreshAddressFormOnPudoSelected
             return;
         }
 
-        $subject->boot();
+        if ($this->bootedAddress !== null) {
+            $subject->address = $this->bootedAddress;
+        }
     }
 
     /**
