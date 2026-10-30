@@ -19,8 +19,9 @@ use PHPUnit\Framework\TestCase;
 /**
  * On a PUDO event roundtrip Hyvä's AddressForm::dehydrate() would autosave the
  * browser's stale address (a logged-in customer's saved address) over the locker
- * that PudoPicker just stamped on the quote. The plugin must reload the form from
- * the quote instead, and leave every other roundtrip to Hyvä.
+ * that PudoPicker just stamped on the quote. The plugin must send back the address
+ * boot() loaded from the quote instead, without booting the form a second time, and
+ * leave every other roundtrip to Hyvä.
  */
 class RefreshAddressFormOnPudoSelectedTest extends TestCase
 {
@@ -54,15 +55,67 @@ class RefreshAddressFormOnPudoSelectedTest extends TestCase
     /**
      * @dataProvider pudoEvents
      */
-    public function testSkipsAutosaveAndReloadsFromQuoteOnPudoEvent(string $event): void
+    public function testSkipsAutosaveAndSendsBackTheQuoteAddressOnPudoEvent(string $event): void
     {
         $this->form->method('getRequest')->with('updates')
             ->willReturn([['type' => 'fireEvent', 'payload' => ['event' => $event, 'params' => []]]]);
-        $this->form->expects($this->once())->method('boot');
+
+        $this->bootThenHydrate(['street' => ['Easybox Lotus'], 'city' => 'Oradea']);
 
         $this->plugin->aroundDehydrate($this->form, function (): void {
             $this->fail('Hyvä autosave must not run on a PUDO event roundtrip.');
         });
+
+        $this->assertSame(['street' => ['Easybox Lotus'], 'city' => 'Oradea'], $this->form->address);
+    }
+
+    /**
+     * Magewire already booted the component; booting it again re-runs the form's
+     * init() and every form modifier throws "A form modifier with name ... already
+     * exists".
+     *
+     * @dataProvider pudoEvents
+     */
+    public function testDoesNotBootTheFormAgainOnPudoEvent(string $event): void
+    {
+        $this->form->method('getRequest')->with('updates')->willReturn([
+            ['type' => 'syncInput', 'payload' => ['name' => 'address.street.0', 'value' => 'Str. X 1']],
+            ['type' => 'fireEvent', 'payload' => ['event' => $event, 'params' => []]],
+        ]);
+        $this->form->expects($this->never())->method('boot');
+
+        $this->bootThenHydrate(['street' => ['Easybox Lotus']]);
+
+        $this->plugin->aroundDehydrate($this->form, function (): void {
+            $this->fail('Hyvä autosave must not run on a PUDO event roundtrip.');
+        });
+
+        $this->assertSame(['street' => ['Easybox Lotus']], $this->form->address);
+    }
+
+    public function testLeavesTheAddressAloneWhenBootWasNotSeen(): void
+    {
+        $this->form->method('getRequest')->with('updates')->willReturn([
+            ['type' => 'fireEvent', 'payload' => ['event' => 'innoship-pudo-selected', 'params' => []]],
+        ]);
+        $this->form->address = ['city' => 'Oradea'];
+
+        $this->plugin->aroundDehydrate($this->form, function (): void {
+            $this->fail('Hyvä autosave must not run on a PUDO event roundtrip.');
+        });
+
+        $this->assertSame(['city' => 'Oradea'], $this->form->address);
+    }
+
+    /**
+     * boot() loads the quote address, then hydration overwrites it with the
+     * browser's copy (a logged-in customer's saved address).
+     */
+    private function bootThenHydrate(array $quoteAddress): void
+    {
+        $this->form->address = $quoteAddress;
+        $this->plugin->afterBoot($this->form, null);
+        $this->form->address = ['street' => ['Str. Salvata 9'], 'city' => 'Bucuresti'];
     }
 
     public static function pudoEvents(): array
