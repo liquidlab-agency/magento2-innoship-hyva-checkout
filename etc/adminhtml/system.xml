@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © - LiquidLab Agency - All rights reserved.
+ * See LICENSE.txt for license details.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <!-- Added to upstream's InnoShip Locker group, next to its other locker settings. -->
+        <section id="carriers">
+            <group id="innoshipcargusgo">
+                <field id="lock_locker_address" translate="label comment" type="select" sortOrder="900"
+                       showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Lock the Shipping Address to the Pickup Point</label>
+                    <comment>Hyvä Checkout: once a pickup point is chosen, the street, city, postcode, county, country and company it filled in can't be edited. The customer changes them by choosing another pickup point.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

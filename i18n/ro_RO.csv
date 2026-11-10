@@ -51,3 +51,6 @@
 "Search","Căutare",module,Liquidlab_InnoShipHyva
 "Search by name, street, city or postcode","Caută după nume, stradă, oraș sau cod poștal",module,Liquidlab_InnoShipHyva
 "This pickup point is no longer available. Please select another one.","Acest punct de ridicare nu mai este disponibil. Vă rugăm să selectați altul.",module,Liquidlab_InnoShipHyva
+"This is the pickup point's address. To change it, choose another pickup point.","Aceasta este adresa punctului de ridicare. Pentru a o modifica, alegeți alt punct de ridicare.",module,Liquidlab_InnoShipHyva
+"Lock the Shipping Address to the Pickup Point","Blochează adresa de livrare la punctul de ridicare",module,Liquidlab_InnoShipHyva
+"Hyvä Checkout: once a pickup point is chosen, the street, city, postcode, county, country and company it filled in can't be edited. The customer changes them by choosing another pickup point.","Hyvä Checkout: după alegerea unui punct de ridicare, strada, orașul, codul poștal, județul, țara și compania completate de acesta nu mai pot fi modificate. Clientul le schimbă alegând alt punct de ridicare.",module,Liquidlab_InnoShipHyva

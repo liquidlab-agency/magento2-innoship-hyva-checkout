@@ -179,6 +179,18 @@ The module ensures that the available payment methods are always in sync with th
 - **Instant Refresh:** In Hyvä Checkout, the payment methods list is automatically refreshed whenever the shipping method changes, ensuring restrictions take effect immediately without a page reload.
 - **Improved logic:** Unlike the upstream implementation, our restriction logic is more robust and handles normalized shipping method codes correctly.
 
+### 9. Read-only locker address
+
+While a locker is the destination, the customer can't edit the address it filled in. `Model\Form\EntityFormModifier\LockLockerAddressFields` is a Hyvä form modifier on the shipping address form (`etc/frontend/di.xml`, sortOrder 800). On every `form:build` it disables street, city, postcode, company, country and county, and adds a note under Street: "This is the pickup point's address. To change it, choose another pickup point." Name and telephone stay editable.
+
+- It locks only when the **quote** shipping address has a stamped `innoship_pudo_id` and a locker shipping method, never from the session.
+- A field the locker left empty stays editable (for example a county the region lookup couldn't match).
+- The form re-renders on `innoship-pudo-selected` / `innoship-pudo-cleared`, so picking, clearing or switching to a courier locks and unlocks it without a page reload or a browser script.
+- Hyvä's front-end and Magewire validators skip disabled fields.
+- At order submit, `Observer\CheckoutSubmitBefore` writes the locker's company, street, city, postcode, country and county back onto the shipping address, so the lock isn't the only safeguard.
+
+Turn it off under **Stores → Configuration → Sales → Shipping Methods → InnoShip Locker → Lock the Shipping Address to the Pickup Point** (`carriers/innoshipcargusgo/lock_locker_address`, default Yes). Change the locked fields with the modifier's `lockedFields` constructor argument.
+
 ## How it integrates with InnoShip_InnoShip
 
 | Concern | Owned by |
@@ -193,6 +205,7 @@ The module ensures that the available payment methods are always in sync with th
 | Cached pickup-point JSON for the map (`innoshiphyva/pudo/points`) | This module |
 | Payment method filtering and refresh logic | This module |
 | Pre-submit safety observer | This module |
+| Read-only locker address on the shipping form | This module |
 | Disabling unused `InnoShip_InnoShip` frontend controllers via DI preferences | This module |
 | Hyvä order-view template override | This module |
 
