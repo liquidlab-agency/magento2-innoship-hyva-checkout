@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace Liquidlab\InnoShipHyva\Observer;
 
+use Liquidlab\InnoShipHyva\Model\RegionResolver;
 use Magento\Checkout\Model\Session as SessionCheckout;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
@@ -22,7 +23,8 @@ class CheckoutSubmitBefore implements ObserverInterface
         private readonly SessionCheckout $sessionCheckout,
         private readonly LoggerInterface $logger,
         private readonly AddressExtensionFactory $addressExtensionFactory,
-        private readonly CartRepositoryInterface $cartRepository
+        private readonly CartRepositoryInterface $cartRepository,
+        private readonly RegionResolver $regionResolver
     ) {
     }
 
@@ -189,6 +191,23 @@ class CheckoutSubmitBefore implements ObserverInterface
 
         if (!empty($pudoData['postal_code'])) {
             $shippingAddress->setPostcode($pudoData['postal_code']);
+        }
+
+        // Country and county too, so a locker order can't keep a country or county
+        // edited on the form; same resolution as PudoPicker::updateShippingAddressWithPudo().
+        if (!empty($pudoData['country_code'])) {
+            $shippingAddress->setCountryId($pudoData['country_code']);
+        }
+
+        if (!empty($pudoData['county_name'])) {
+            $regionInfo = $this->regionResolver->resolveByName(
+                (string)$pudoData['county_name'],
+                (string)$shippingAddress->getCountryId()
+            );
+            $shippingAddress->setRegion($regionInfo['region']);
+            if ($regionInfo['region_id'] !== null) {
+                $shippingAddress->setRegionId($regionInfo['region_id']);
+            }
         }
 
         // Set PUDO ID for InnoShip

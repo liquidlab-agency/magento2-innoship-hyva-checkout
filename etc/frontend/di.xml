@@ -103,6 +103,21 @@
     </type>
 
     <!--
+        Make the shipping address read-only while a locker is the destination,
+        so the customer can't change the locker's street, city, postcode, county,
+        country or name. Must run before Hyvä's with_base_attributes (sortOrder 900),
+        which turns the disabled state into the `disabled` attribute.
+        Toggle: carriers/innoshipcargusgo/lock_locker_address.
+    -->
+    <type name="Hyva\Checkout\Model\Form\EntityForm\EavAttributeShippingAddressForm">
+        <arguments>
+            <argument name="entityFormModifiers" xsi:type="array">
+                <item name="innoship_hyva_lock_locker_address" sortOrder="800" xsi:type="object">Liquidlab\InnoShipHyva\Model\Form\EntityFormModifier\LockLockerAddressFields</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
         Lock "billing same as shipping" to OFF while a PUDO is selected.
         Invoices can't be issued to a locker address. The plugin forces
         the flag false on every boot/update and subscribes the component
