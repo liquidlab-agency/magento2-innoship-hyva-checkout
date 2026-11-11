@@ -40,6 +40,15 @@ use Magewirephp\Magewire\Model\Action\FireEvent;
  * request, so a second `init()` makes every form modifier register its listeners
  * again, and each one logs a FormException ("A form modifier with name ... already
  * exists").
+ *
+ * The rendered form must be built from that quote address too. When the event
+ * travels with deferred `address.*` inputs, Magewire passes the browser's address
+ * to Hyvä's `updatingAddress()`, which resets the form and fills it from the
+ * browser before the template builds it. Every `form:build` modifier then sees the
+ * address from before the locker; a county-dependent city list was built for an
+ * empty county and showed no cities, while the quote held the locker's. So just
+ * before `getPublicForm()` builds the form, it is filled again from the quote
+ * address, the same reset-and-fill `updatingAddress()` does.
  */
 class RefreshAddressFormOnPudoSelected
 {
@@ -70,6 +79,21 @@ class RefreshAddressFormOnPudoSelected
     public function afterBoot(AddressForm $subject, $result): void
     {
         $this->bootedAddress = $subject->address;
+    }
+
+    /**
+     * On a PUDO event roundtrip, fill the form from the quote address before the
+     * template builds it, so `form:build` modifiers see the locker address and not
+     * the browser's stale copy.
+     */
+    public function beforeGetPublicForm(AddressForm $subject, bool $build = true): array
+    {
+        if ($this->bootedAddress !== null && self::isPudoEventRequest($subject->getRequest('updates'))) {
+            $subject->getForm()->reset()->fill($this->bootedAddress);
+            $subject->address = $this->bootedAddress;
+        }
+
+        return [$build];
     }
 
     /**

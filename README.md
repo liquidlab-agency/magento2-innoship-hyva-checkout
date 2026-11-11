@@ -186,6 +186,7 @@ While a locker is the destination, the customer can't edit the address it filled
 - It locks only when the **quote** shipping address has a stamped `innoship_pudo_id` and a locker shipping method, never from the session.
 - A field the locker left empty stays editable (for example a county the region lookup couldn't match).
 - The form re-renders on `innoship-pudo-selected` / `innoship-pudo-cleared`, so picking, clearing or switching to a courier locks and unlocks it without a page reload or a browser script.
+- That re-render builds the form from the quote's address, not from what the browser still holds, so a store's own `form:build` modifiers see the locker's county and city. A county-dependent city list, for example, lists the locker county's cities on the first pick instead of "choose a county first".
 - Hyvä's front-end and Magewire validators skip disabled fields.
 - At order submit, `Observer\CheckoutSubmitBefore` writes the locker's company, street, city, postcode, country and county back onto the shipping address, so the lock isn't the only safeguard.
 

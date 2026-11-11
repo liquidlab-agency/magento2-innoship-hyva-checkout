@@ -11,6 +11,7 @@ namespace Liquidlab\InnoShipHyva\Test\Unit\Plugin\HyvaCheckout;
 
 use Hyva\Checkout\Magewire\Checkout\AddressView\ShippingDetails\AddressForm;
 use Hyva\Checkout\Magewire\Checkout\AddressView\ShippingDetails\AddressList;
+use Hyva\Checkout\Model\Form\EntityFormInterface;
 use Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\RefreshAddressFormOnPudoSelected;
 use Liquidlab\InnoShipHyva\Plugin\HyvaCheckout\RefreshAddressListOnPudoSelected;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -91,6 +92,55 @@ class RefreshAddressFormOnPudoSelectedTest extends TestCase
         });
 
         $this->assertSame(['street' => ['Easybox Lotus']], $this->form->address);
+    }
+
+    /**
+     * A deferred input sent with the event makes Hyvä's updatingAddress() refill
+     * the form from the browser, so a form:build modifier (a county-dependent city
+     * list) saw the county from before the locker. The form must be built from the
+     * quote address.
+     *
+     * @dataProvider pudoEvents
+     */
+    public function testBuildsTheFormFromTheQuoteAddressOnPudoEvent(string $event): void
+    {
+        $this->form->method('getRequest')->with('updates')->willReturn([
+            ['type' => 'syncInput', 'payload' => ['name' => 'address.firstname', 'value' => 'Ana']],
+            ['type' => 'fireEvent', 'payload' => ['event' => $event, 'params' => []]],
+        ]);
+        $quoteAddress = ['street' => ['Easybox Lotus'], 'city' => 'Dej', 'region' => '291'];
+        $entityForm = $this->createMock(EntityFormInterface::class);
+        $entityForm->expects($this->once())->method('reset')->willReturnSelf();
+        $entityForm->expects($this->once())->method('fill')->with($quoteAddress)->willReturnSelf();
+        $this->form->method('getForm')->willReturn($entityForm);
+
+        $this->bootThenHydrate($quoteAddress);
+
+        $this->assertSame([true], $this->plugin->beforeGetPublicForm($this->form, true));
+        $this->assertSame($quoteAddress, $this->form->address);
+    }
+
+    public function testLeavesTheFormToHyvaOnOtherRoundtrips(): void
+    {
+        $this->form->method('getRequest')->with('updates')->willReturn([
+            ['type' => 'syncInput', 'payload' => ['name' => 'address.region', 'value' => '291']],
+        ]);
+        $this->form->expects($this->never())->method('getForm');
+
+        $this->bootThenHydrate(['city' => 'Oradea']);
+
+        $this->assertSame([false], $this->plugin->beforeGetPublicForm($this->form, false));
+        $this->assertSame(['street' => ['Str. Salvata 9'], 'city' => 'Bucuresti'], $this->form->address);
+    }
+
+    public function testLeavesTheFormAloneWhenBootWasNotSeen(): void
+    {
+        $this->form->method('getRequest')->with('updates')->willReturn([
+            ['type' => 'fireEvent', 'payload' => ['event' => 'innoship-pudo-selected', 'params' => []]],
+        ]);
+        $this->form->expects($this->never())->method('getForm');
+
+        $this->assertSame([true], $this->plugin->beforeGetPublicForm($this->form));
     }
 
     public function testLeavesTheAddressAloneWhenBootWasNotSeen(): void
